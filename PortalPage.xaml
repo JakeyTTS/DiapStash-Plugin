@@ -1,0 +1,29 @@
+<UserControl
+    x:Class="DiapStash_Plugin.PortalPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer>
+        <StackPanel Spacing="15" MaxWidth="700" HorizontalAlignment="Left">
+            <TextBlock Text="DiapStash OAuth2 Secure Authentication" Style="{StaticResource SubtitleTextBlockStyle}" FontWeight="Bold"/>
+            <Border Background="{ThemeResource LayerFillColorAltBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="15" Margin="0,5,0,5">
+                <StackPanel Spacing="5">
+                    <TextBlock Text="📋 Setup Instructions:" FontWeight="Bold" Margin="0,0,0,5"/>
+                    <TextBlock Text="1. Go to DiapStash App Developer settings and hit 'Create API client'." TextWrapping="Wrap" FontSize="13"/>
+                    <TextBlock Text="2. Select 'API Server' as the Application type." TextWrapping="Wrap" FontSize="13"/>
+                    <TextBlock Text="3. Add Redirect URL exactly as: http://localhost:8888/" FontWeight="SemiBold" TextWrapping="Wrap" FontSize="13" Foreground="{ThemeResource SystemAccentColorLight3}"/>
+                    <TextBlock Text="4. Paste the Client ID and Secret below, then click Link Account." TextWrapping="Wrap" FontSize="13"/>
+                </StackPanel>
+            </Border>
+            <TextBox x:Name="ClientIdBox" Header="OAuth2 Client ID" PlaceholderText="Paste DiapStash Client ID here..."/>
+            <PasswordBox x:Name="ClientSecretBox" Header="OAuth2 Client Secret" PlaceholderText="Paste DiapStash Client Secret here..."/>
+            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,10,0,15">
+                <Button x:Name="AuthBtn" Content="Link DiapStash Account" Click="OpenPortal_Click" Style="{StaticResource AccentButtonStyle}" Width="180"/>
+            </StackPanel>
+            <TextBox x:Name="StashTokenBox" Header="Active Access Bearer Token (Auto-Generated)" PlaceholderText="Awaiting OAuth2 workflow handshake..." IsReadOnly="True"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

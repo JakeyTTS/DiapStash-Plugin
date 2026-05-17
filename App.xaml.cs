@@ -1,23 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
-using Windows.ApplicationModel;
-using Windows.ApplicationModel.Activation;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
-
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
 
 namespace DiapStash_Plugin
 {
@@ -34,14 +17,59 @@ namespace DiapStash_Plugin
         /// </summary>
         public App()
         {
-            InitializeComponent();
+            this.InitializeComponent();
+
+            // Sincronizamos el evento usando el delegado estricto de WinUI 3
+            this.UnhandledException += App_UnhandledException;
+        }
+
+        // FIXED: Forzamos el uso explícito de Microsoft.UI.Xaml.UnhandledExceptionEventArgs para romper la ambigüedad
+        private void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+        {
+            e.Handled = true;
+
+            StringBuilder errorReport = new StringBuilder();
+            errorReport.AppendLine("==========================================================================");
+            errorReport.AppendLine($"🚨 WINUI CRASH INTERCEPTED: {DateTime.Now}");
+            errorReport.AppendLine($"Message: {e.Message}");
+            errorReport.AppendLine($"Exception Type: {e.Exception?.GetType().FullName}");
+            errorReport.AppendLine("==========================================================================");
+            errorReport.AppendLine("📝 FULL RUNTIME EXCEPTION STACK TRACE:");
+            errorReport.AppendLine(e.Exception?.ToString() ?? "No diagnostic exception sub-properties available.");
+            errorReport.AppendLine("==========================================================================");
+
+            string fullErrorText = errorReport.ToString();
+
+            // 1. Volcar el error en la consola de salida de Visual Studio de inmediato
+            System.Diagnostics.Debug.WriteLine(fullErrorText);
+
+            // 2. FIXED: Usamos el DataPackage y Clipboard correctos del espacio de nombres de WinRT del sistema
+            try
+            {
+                var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                dataPackage.SetText(fullErrorText);
+
+                // Portapapeles nativo del sistema operativo compatible con el contexto de WinUI 3
+                Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+                System.Diagnostics.Debug.WriteLine("📋 Full stack trace automatically copied to clipboard!");
+            }
+            catch (Exception clipEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"⚠️ Clipboard copy skipped due to cross-thread boundaries: {clipEx.Message}");
+            }
+
+            // 3. Pausa del hilo si el depurador está activo
+            if (System.Diagnostics.Debugger.IsAttached)
+            {
+                System.Diagnostics.Debugger.Break();
+            }
         }
 
         /// <summary>
         /// Invoked when the application is launched.
         /// </summary>
         /// <param name="args">Details about the launch request and process.</param>
-        protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+        protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
             _window = new MainWindow();
             _window.Activate();

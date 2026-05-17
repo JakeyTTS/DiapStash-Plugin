@@ -1,102 +1,392 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace DiapStash_Plugin
 {
+    public class DiaperStockItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Size { get; set; } = string.Empty;
+        public int Left { get; set; }
+        public string ImageUrl { get; set; } = string.Empty;
+    }
+
+    public class DiapStashChangeState
+    {
+        public int Id { get; set; }
+        public DateTime StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public bool IsActiveSession => EndTime == null;
+        public string Note { get; set; } = string.Empty;
+        public string ProductName { get; set; } = "Standard Diaper Product";
+        public string Size { get; set; } = "N/A";
+        public string VariantId { get; set; } = string.Empty;
+        public int TypeId { get; set; }
+        public int Wetness { get; set; }
+        public int MessyLevel { get; set; }
+        public bool HasLeak { get; set; }
+
+        // FIXED: Escala sobre 5 con cálculo de porcentaje matemático
+        public string WetnessDisplay => Wetness > 0 ? $"{Wetness}/5" : "Dry";
+        public int WetnessPercentage => Wetness > 0 ? (int)Math.Round((Wetness / 5.0) * 100) : 0;
+
+        // FIXED: Escala corregida a 3 con cálculo de porcentaje matemático
+        public string MessyDisplay => MessyLevel > 0 ? $"{MessyLevel}/3" : "Clean";
+        public int MessyPercentage => MessyLevel > 0 ? (int)Math.Round((MessyLevel / 3.0) * 100) : 0;
+    }
+
     public class DiapStashClient
     {
         private static DiapStashClient? _instance;
         public static DiapStashClient Instance => _instance ??= new DiapStashClient();
 
-        private readonly HttpClient _httpClient = new HttpClient();
+        private readonly HttpClient _httpClient;
         private string _accessToken = string.Empty;
+        private string _clientId = string.Empty;
+
+        private readonly Dictionary<int, (string FullName, string ImageUrl)> _typeMetadataCache =
+            new Dictionary<int, (string FullName, string ImageUrl)>();
 
         private DiapStashClient()
         {
-            _httpClient.BaseAddress = new Uri("https://api.diapstash.com/");
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            var handler = new HttpClientHandler
+            {
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+            };
+
+            _httpClient = new HttpClient(handler)
+            {
+                BaseAddress = new Uri("https://api.diapstash.com/")
+            };
         }
 
-        public void ConfigureAuthentication(string token)
+        public void ConfigureAuthentication(string token, string clientId)
         {
             _accessToken = token?.Trim() ?? string.Empty;
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+            _clientId = clientId?.Trim() ?? string.Empty;
         }
 
-        /// <summary>
-        /// Queries the remote server catalog for a human-readable inventory summary.
-        /// </summary>
-        public async Task<string> FetchCurrentStockSummaryAsync()
+        private HttpRequestMessage CreateAuthenticatedRequest(HttpMethod method, string relativeUrl)
         {
-            if (string.IsNullOrEmpty(_accessToken)) return "⚠️ DiapStash plugin error: Access Token missing or not authorized.";
+            var request = new HttpRequestMessage(method, relativeUrl);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.TryAddWithoutValidation("User-Agent", "JakeyTTS-DiapStash-Plugin/1.0.0 (WinUI3; .NET)");
+
+            if (!string.IsNullOrEmpty(_clientId))
+            {
+                request.Headers.TryAddWithoutValidation("DS-API-CLIENT-ID", _clientId);
+            }
+
+            if (!string.IsNullOrEmpty(_accessToken))
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+            }
+
+            return request;
+        }
+
+        public async Task<string> GetRawEndpointDataAsync(string endpointUrl)
+        {
+            if (string.IsNullOrEmpty(_accessToken) || string.IsNullOrEmpty(_clientId))
+                return "⚠️ Diagnostic Error: Credentials missing. Link account first.";
 
             try
             {
-                // Endpoint target matching public catalog specifications
-                var response = await _httpClient.GetAsync("api/v1/stock");
-                if (!response.IsSuccessStatusCode) return $"⚠️ DiapStash API error: HTTP {(int)response.StatusCode}";
+                using var request = CreateAuthenticatedRequest(HttpMethod.Get, endpointUrl);
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
-                string rawJson = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(rawJson);
-                var data = doc.RootElement;
-
-                // Loop through items in inventory data array array
-                if (data.ValueKind == JsonValueKind.Array)
+                string rawJson;
+                try
                 {
-                    var summary = new System.Text.StringBuilder("📦 Current DiapStash Stock: ");
-                    int uniqueTypes = 0;
+                    rawJson = await response.Content.ReadAsStringAsync();
+                }
+                catch (IOException) { return "{}"; }
 
-                    foreach (var item in data.EnumerateArray())
+                if (!response.IsSuccessStatusCode)
+                    return $"❌ HTTP Error {(int)response.StatusCode}: {response.ReasonPhrase}\nDetails: {rawJson}";
+
+                using var jsonDoc = JsonDocument.Parse(rawJson);
+                return JsonSerializer.Serialize(jsonDoc, new JsonSerializerOptions { WriteIndented = true });
+            }
+            catch (Exception ex) { return $"❌ Network exception: {ex.Message}"; }
+        }
+
+        public async Task<List<DiaperStockItem>> FetchCurrentStockItemsAsync()
+        {
+            var allStockItems = new List<DiaperStockItem>();
+            if (string.IsNullOrEmpty(_accessToken) || string.IsNullOrEmpty(_clientId)) return allStockItems;
+
+            try
+            {
+                var disposablesTask = ParseStockEndpointCollectionAsync("api/v1/stock/disposables");
+                var reusablesTask = ParseStockEndpointCollectionAsync("api/v1/stock/reusables");
+
+                await Task.WhenAll(disposablesTask, reusablesTask);
+
+                allStockItems.AddRange(disposablesTask.Result);
+                allStockItems.AddRange(reusablesTask.Result);
+            }
+            catch { }
+            return allStockItems;
+        }
+
+        private async Task<List<DiaperStockItem>> ParseStockEndpointCollectionAsync(string targetEndpoint)
+        {
+            var list = new List<DiaperStockItem>();
+            try
+            {
+                using var request = CreateAuthenticatedRequest(HttpMethod.Get, targetEndpoint);
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                if (!response.IsSuccessStatusCode) return list;
+
+                string rawJson;
+                try
+                {
+                    rawJson = await response.Content.ReadAsStringAsync();
+                }
+                catch (IOException) { return list; }
+
+                using var doc = JsonDocument.Parse(rawJson);
+
+                if (doc.RootElement.TryGetProperty("data", out var dataArray) && dataArray.ValueKind == JsonValueKind.Array)
+                {
+                    var processingTasks = new List<Task<DiaperStockItem>>();
+
+                    foreach (var item in dataArray.EnumerateArray())
                     {
-                        string diaperName = item.GetProperty("name").GetString() ?? "Unknown";
-                        int count = item.GetProperty("quantity").GetInt32();
-                        string size = item.TryGetProperty("size", out var s) ? s.GetString() ?? "" : "";
+                        int diaperTypeId = item.TryGetProperty("diaperTypeId", out var dtProp) ? dtProp.GetInt32() : 0;
+                        string variantId = item.TryGetProperty("variantId", out var vProp) && vProp.ValueKind == JsonValueKind.String ? vProp.GetString() ?? "" : "";
+                        string size = item.TryGetProperty("size", out var sProp) ? sProp.GetString() ?? "N/A" : "N/A";
+                        int itemsLeft = item.TryGetProperty("left", out var leftProp) ? leftProp.GetInt32() : 0;
 
-                        summary.Append($"[{diaperName} {(string.IsNullOrEmpty(size) ? "" : $"({size})")}: {count}] ");
-                        uniqueTypes++;
+                        processingTasks.Add(Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var metadata = await FetchDiaperTypeMetadataAsync(diaperTypeId, variantId);
+                                string cleanName = metadata.FullName;
+                                if (cleanName.Contains("http")) cleanName = $"Product #{diaperTypeId}";
+
+                                return new DiaperStockItem
+                                {
+                                    Name = cleanName,
+                                    Size = size,
+                                    Left = itemsLeft,
+                                    ImageUrl = metadata.ImageUrl
+                                };
+                            }
+                            catch
+                            {
+                                return new DiaperStockItem
+                                {
+                                    Name = $"Product #{diaperTypeId}",
+                                    Size = size,
+                                    Left = itemsLeft,
+                                    ImageUrl = ""
+                                };
+                            }
+                        }));
                     }
 
-                    return uniqueTypes == 0 ? "📦 DiapStash Inventory is currently empty." : summary.ToString().Trim();
+                    var results = await Task.WhenAll(processingTasks);
+                    list.AddRange(results);
                 }
-
-                return "⚠️ Unexpected payload scheme returned from stock API.";
             }
-            catch (Exception ex)
-            {
-                return $"❌ Network tracking exception: {ex.Message}";
-            }
+            catch { }
+            return list;
         }
 
-        /// <summary>
-        /// Retrieves telemetry logging metadata on the latest active or current process state change.
-        /// </summary>
-        public async Task<string> FetchLatestChangeStateAsync()
+        public async Task<string> FetchCurrentStockSummaryAsync()
         {
-            if (string.IsNullOrEmpty(_accessToken)) return "⚠️ DiapStash plugin unauthorized.";
+            var items = await FetchCurrentStockItemsAsync();
+            if (items.Count == 0) return "📦 DiapStash Inventory is currently empty.";
+
+            var sb = new StringBuilder("📦 Current DiapStash Stock: ");
+            var details = items.Select(i => $"{i.Name} ({i.Size}): {i.Left} left");
+            sb.Append(string.Join(", ", details) + ".");
+            return sb.ToString();
+        }
+
+        public async Task<(string FullName, string ImageUrl)> FetchDiaperTypeMetadataAsync(int typeId, string targetVariantId)
+        {
+            string fallbackName = $"Variant #{typeId}";
+
+            if (typeId <= 0) return (fallbackName, "");
+
+            lock (_typeMetadataCache)
+            {
+                if (_typeMetadataCache.ContainsKey(typeId)) return _typeMetadataCache[typeId];
+            }
 
             try
             {
-                var response = await _httpClient.GetAsync("api/v1/changes/current");
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return "🍼 No active process or changes running currently.";
-                if (!response.IsSuccessStatusCode) return $"⚠️ History API returned HTTP {(int)response.StatusCode}";
+                using var request = CreateAuthenticatedRequest(HttpMethod.Get, $"api/v1/type/types/{typeId}");
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
-                string rawJson = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode) return (fallbackName, "");
+
+                string rawJson;
+                try
+                {
+                    rawJson = await response.Content.ReadAsStringAsync();
+                }
+                catch (IOException) { return (fallbackName, ""); }
+
                 using var doc = JsonDocument.Parse(rawJson);
-                var root = doc.RootElement;
 
-                string timeString = root.TryGetProperty("started_at", out var t) ? t.GetString() ?? "" : "Unknown Time";
-                string note = root.TryGetProperty("notes", out var n) ? n.GetString() ?? "None" : "None";
-                string product = root.TryGetProperty("diaper_name", out var d) ? d.GetString() ?? "Standard Product" : "Standard Product";
+                if (!doc.RootElement.TryGetProperty("type", out var typeNode) || typeNode.ValueKind != JsonValueKind.Object)
+                {
+                    return (fallbackName, "");
+                }
 
-                return $"🚼 Active Change State: Wearing {product}. Started at: {timeString}. Memo Notes: {note}.";
+                string brand = typeNode.TryGetProperty("brand_code", out var bProp) ? bProp.GetString() ?? "" : "";
+                string modelName = typeNode.TryGetProperty("name", out var mProp) ? mProp.GetString() ?? "Standard Product" : "Standard Product";
+
+                string fullProductName = string.IsNullOrEmpty(brand) ? modelName : $"{brand} {modelName}";
+                string remoteCdnImageUrl = "";
+
+                if (typeNode.TryGetProperty("variants", out var variantsArray) && variantsArray.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var variant in variantsArray.EnumerateArray())
+                    {
+                        string currentVariantId = variant.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
+
+                        if (string.Equals(currentVariantId, targetVariantId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            string colorName = variant.TryGetProperty("name", out var cProp) ? cProp.GetString() ?? "" : "";
+                            if (!string.IsNullOrEmpty(colorName)) fullProductName += $" ({colorName})";
+
+                            if (variant.TryGetProperty("primaryImage", out var imgObj) && imgObj.ValueKind == JsonValueKind.Object)
+                            {
+                                if (imgObj.TryGetProperty("url", out var urlProp)) remoteCdnImageUrl = urlProp.GetString() ?? "";
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                var resolvedMetadata = (fullProductName, remoteCdnImageUrl);
+                lock (_typeMetadataCache) { _typeMetadataCache[typeId] = resolvedMetadata; }
+                return resolvedMetadata;
             }
-            catch (Exception ex)
+            catch (IOException ioEx)
             {
-                return $"❌ Failed to retrieve runtime change state: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"ℹ️ Ignored redundant network socket abort exception: {ioEx.Message}");
+                return (fallbackName, "");
             }
+            catch (HttpRequestException httpEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"ℹ️ Ignored concurrent HTTP pipeline interruption: {httpEx.Message}");
+                return (fallbackName, "");
+            }
+            catch { return (fallbackName, ""); }
+        }
+
+        public async Task<DiapStashChangeState?> FetchLatestChangeStateObjectAsync()
+        {
+            if (string.IsNullOrEmpty(_accessToken) || string.IsNullOrEmpty(_clientId)) return null;
+
+            try
+            {
+                using var request = CreateAuthenticatedRequest(HttpMethod.Get, "api/v1/history/changes");
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                if ((int)response.StatusCode == 429)
+                {
+                    return new DiapStashChangeState { ProductName = "⚠️ Cooldown Active (429)", Note = "Too many requests. Wait a moment." };
+                }
+
+                if (!response.IsSuccessStatusCode) return null;
+
+                string rawJson;
+                try
+                {
+                    rawJson = await response.Content.ReadAsStringAsync();
+                }
+                catch (IOException) { return null; }
+
+                using var doc = JsonDocument.Parse(rawJson);
+
+                if (!doc.RootElement.TryGetProperty("data", out var dataArray) || dataArray.ValueKind != JsonValueKind.Array || dataArray.GetArrayLength() == 0)
+                {
+                    return null;
+                }
+
+                JsonElement latestNode = dataArray[0];
+                DateTime maxStartTime = DateTime.MinValue;
+
+                foreach (var node in dataArray.EnumerateArray())
+                {
+                    if (node.TryGetProperty("startTime", out var stProp) && stProp.ValueKind == JsonValueKind.String)
+                    {
+                        if (DateTime.TryParse(stProp.GetString(), out DateTime currentStartTime) && currentStartTime > maxStartTime)
+                        {
+                            maxStartTime = currentStartTime;
+                            latestNode = node;
+                        }
+                    }
+                }
+
+                var stateResult = new DiapStashChangeState();
+
+                if (latestNode.TryGetProperty("id", out var idProp)) stateResult.Id = idProp.GetInt32();
+
+                if (latestNode.TryGetProperty("startTime", out var stPropActual) && stPropActual.ValueKind == JsonValueKind.String)
+                {
+                    if (DateTime.TryParse(stPropActual.GetString(), out DateTime sTime)) stateResult.StartTime = sTime;
+                }
+
+                if (latestNode.TryGetProperty("endTime", out var etProp) && etProp.ValueKind == JsonValueKind.String)
+                {
+                    if (DateTime.TryParse(etProp.GetString(), out DateTime eTime)) stateResult.EndTime = eTime;
+                }
+
+                if (latestNode.TryGetProperty("note", out var noteProp) && noteProp.ValueKind == JsonValueKind.String)
+                {
+                    stateResult.Note = noteProp.GetString() ?? string.Empty;
+                }
+
+                if (latestNode.TryGetProperty("leak", out var leakProp))
+                {
+                    if (leakProp.ValueKind == JsonValueKind.True) stateResult.HasLeak = true;
+                    else if (leakProp.ValueKind == JsonValueKind.String) stateResult.HasLeak = !string.IsNullOrEmpty(leakProp.GetString());
+                }
+
+                if (latestNode.TryGetProperty("wetness", out var wetProp))
+                {
+                    if (wetProp.ValueKind == JsonValueKind.Number) stateResult.Wetness = wetProp.GetInt32();
+                    else if (wetProp.ValueKind == JsonValueKind.String && int.TryParse(wetProp.GetString(), out int wVal)) stateResult.Wetness = wVal;
+                }
+
+                if (latestNode.TryGetProperty("messyLevel", out var messyProp))
+                {
+                    if (messyProp.ValueKind == JsonValueKind.Number) stateResult.MessyLevel = messyProp.GetInt32();
+                    else if (messyProp.ValueKind == JsonValueKind.String && int.TryParse(messyProp.GetString(), out int mVal)) stateResult.MessyLevel = mVal;
+                }
+
+                if (latestNode.TryGetProperty("diapers", out var diapersArray) && diapersArray.ValueKind == JsonValueKind.Array && diapersArray.GetArrayLength() > 0)
+                {
+                    var innerDiaper = diapersArray[0];
+                    if (innerDiaper.TryGetProperty("size", out var sizeProp)) stateResult.Size = sizeProp.GetString() ?? "N/A";
+                    if (innerDiaper.TryGetProperty("variantId", out var varProp)) stateResult.VariantId = varProp.GetString() ?? string.Empty;
+                    if (innerDiaper.TryGetProperty("typeId", out var typeProp)) stateResult.TypeId = typeProp.GetInt32();
+
+                    var metadata = await FetchDiaperTypeMetadataAsync(stateResult.TypeId, stateResult.VariantId);
+                    stateResult.ProductName = metadata.FullName;
+                    stateResult.VariantId = metadata.ImageUrl;
+                }
+
+                return stateResult;
+            }
+            catch { return null; }
         }
     }
 }
