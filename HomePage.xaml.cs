@@ -1,9 +1,8 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using Windows.UI;
 
 namespace DiapStash_Plugin
 {
@@ -11,6 +10,9 @@ namespace DiapStash_Plugin
     {
         private LogWindow? _floatingLogWindow;
         private string _cachedTtsUrl = "ws://localhost:8889/";
+
+        // FIXED: Static historical log cache container to store backend worker context logs securely across window lifecycles
+        public static readonly List<string> LogCacheBacklog = new List<string>();
 
         public HomePage()
         {
@@ -24,7 +26,6 @@ namespace DiapStash_Plugin
             string clientId = settings.Values["SavedClientId"]?.ToString() ?? "";
             string clientSecret = settings.Values["SavedClientSecret"]?.ToString() ?? "";
             string token = settings.Values["SavedStashToken"]?.ToString() ?? "";
-
             _cachedTtsUrl = settings.Values["SavedTtsUrl"]?.ToString() ?? "ws://localhost:8889/";
 
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
@@ -46,7 +47,6 @@ namespace DiapStash_Plugin
 
             var payloadCheck = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync();
 
-            // FIXED: Intercept 429 error payloads instantly to update screen status bounds
             if (DiapStashClient.Instance.IsRateLimited)
             {
                 UpdateStatusUi("⚠️ Too many requests! API limit reached. Screen cannot be loaded right now.", showConfigure: false, showLogin: false, showTts: false, hideLoading: true);
@@ -69,7 +69,6 @@ namespace DiapStash_Plugin
 
         private async Task ExecuteTtsConnectionAsync()
         {
-            // Abort connections if client engine states denote global lock bounds
             if (DiapStashClient.Instance.IsRateLimited) return;
 
             try
@@ -103,13 +102,8 @@ namespace DiapStash_Plugin
             if (string.IsNullOrWhiteSpace(_cachedTtsUrl)) return;
 
             ConnectTtsBtn.IsEnabled = false;
-
-            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            settings.Values["SavedTtsUrl"] = _cachedTtsUrl;
-
-            AppendLog("⚡ Manual pipeline injection trigger captured from Home interface view.");
+            AppendLog("Hierarchy manual injection forced by streamer context.");
             await ExecuteTtsConnectionAsync();
-
             ConnectTtsBtn.IsEnabled = true;
         }
 
@@ -121,13 +115,20 @@ namespace DiapStash_Plugin
                 _floatingLogWindow.Closed += (s, args) => _floatingLogWindow = null;
             }
             _floatingLogWindow.Activate();
-            AppendLog("ℹ️ Telemetry terminal instance attached to independent window thread context.");
         }
 
         public void AppendLog(string message)
         {
+            string logLine = $"[{DateTime.Now:HH:mm:ss}] {message}";
+
+            lock (LogCacheBacklog)
+            {
+                LogCacheBacklog.Add(logLine);
+                if (LogCacheBacklog.Count > 500) LogCacheBacklog.RemoveAt(0); 
+            }
+
             _floatingLogWindow?.AppendLog(message);
-            System.Diagnostics.Debug.WriteLine($"[{DateTime.Now:HH:mm:ss}] {message}");
+            System.Diagnostics.Debug.WriteLine(logLine);
         }
 
         private void ConfigureApi_Click(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateToPage("StashAuth");

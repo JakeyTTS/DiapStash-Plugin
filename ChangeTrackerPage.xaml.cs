@@ -12,7 +12,7 @@ namespace DiapStash_Plugin
             this.InitializeComponent();
 
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            string defaultTemplate = "[DiapStash Default Notification] Status: {diapstash_status}. Item: {diapstash_product} (Size {diapstash_size}). Wetness: {diapstash_wetness}, Mess: {diapstash_messy}. Active Runtime: {diapstash_elapsed}.";
+            string defaultTemplate = "[Diap Stash Default Notification] Status: {diapstash_status}. Item: {diapstash_product} (Size {diapstash_size}). Wetness: {diapstash_wetness}, Mess: {diapstash_messy}. Active Runtime: {diapstash_elapsed}.";
             CustomTtsTemplateBox.Text = settings.Values["SavedTtsTemplate"]?.ToString() ?? defaultTemplate;
 
             JakeyTtsClient.Instance.LoadRulesFromSettings();
@@ -25,7 +25,6 @@ namespace DiapStash_Plugin
             string currentToken = settings.Values["SavedStashToken"]?.ToString() ?? "";
             string currentClientId = settings.Values["SavedClientId"]?.ToString() ?? "";
 
-            // FIXED: Intercept missing configuration parameters when opening this module screen layout panel
             if (string.IsNullOrEmpty(currentToken) || string.IsNullOrEmpty(currentClientId))
             {
                 StatusCardFrame.Visibility = Visibility.Collapsed;
@@ -39,7 +38,6 @@ namespace DiapStash_Plugin
             DiapStashClient.Instance.ConfigureAuthentication(currentToken, currentClientId);
             var statePayload = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync();
 
-            // FIXED: Handle 429 Too Many Requests error statuses on the tracking page natively
             if (DiapStashClient.Instance.IsRateLimited)
             {
                 StatusCardFrame.Visibility = Visibility.Collapsed;
@@ -50,7 +48,6 @@ namespace DiapStash_Plugin
                 return;
             }
 
-            // FIXED: Verify if payloads returned empty context profiles due to expired credentials or token drops (401 responses)
             if (statePayload == null)
             {
                 StatusCardFrame.Visibility = Visibility.Collapsed;
@@ -90,9 +87,10 @@ namespace DiapStash_Plugin
                 }
             }
 
-            if (!string.IsNullOrEmpty(statePayload.VariantId) && statePayload.VariantId.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            // FIXED: Point image layout assignment parsing cleanly straight to the new .ImageUrl separate field parameter
+            if (!string.IsNullOrEmpty(statePayload.ImageUrl) && statePayload.ImageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             {
-                CardProductImage.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(statePayload.VariantId));
+                CardProductImage.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(statePayload.ImageUrl));
             }
             else
             {

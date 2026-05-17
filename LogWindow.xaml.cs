@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using System;
+using System.Text;
 
 namespace DiapStash_Plugin
 {
@@ -12,7 +13,29 @@ namespace DiapStash_Plugin
             IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-            appWindow?.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "appicon.ico"));
+            if (appWindow != null)
+            {
+                appWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "appicon.ico"));
+            }
+
+            // FIXED: Automatically pull and render historical logs cache upon initialization
+            PopulateBacklog();
+        }
+
+        private void PopulateBacklog()
+        {
+            if (LogBlock == null) return;
+
+            var sb = new StringBuilder();
+            lock (HomePage.LogCacheBacklog)
+            {
+                foreach (var line in HomePage.LogCacheBacklog)
+                {
+                    sb.AppendLine(line);
+                }
+            }
+            LogBlock.Text = sb.ToString();
+            LogScroll?.ChangeView(0, LogScroll.ScrollableHeight, 1);
         }
 
         public void AppendLog(string message)
@@ -23,8 +46,11 @@ namespace DiapStash_Plugin
             {
                 try
                 {
-                    LogBlock.Text += $"[{DateTime.Now:HH:mm:ss}] {message}\r\n";
-                    LogScroll?.ChangeView(0, LogScroll.ScrollableHeight, 1);
+                    if (LogBlock != null)
+                    {
+                        LogBlock.Text += $"[{DateTime.Now:HH:mm:ss}] {message}\r\n";
+                        LogScroll?.ChangeView(0, LogScroll.ScrollableHeight, 1);
+                    }
                 }
                 catch { }
             });

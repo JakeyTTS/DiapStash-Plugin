@@ -22,6 +22,10 @@ namespace DiapStash_Plugin
 
             ExtendsContentIntoTitleBar = false;
 
+            // FIXED: Explicitly register the ItemInvoked event directly in C# code-behind 
+            // to bypass silent XAML event binding drops completely!
+            NavView.ItemInvoked += NavView_ItemInvokedHandler;
+
             IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
@@ -47,7 +51,8 @@ namespace DiapStash_Plugin
             MainContentFrame.Content = _homePage;
         }
 
-        private void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+        // FIXED: Renamed to clear out residual XAML-generated binding code and explicitly defined handler parameters
+        private void NavView_ItemInvokedHandler(NavigationView sender, NavigationViewItemInvokedEventArgs args)
         {
             var item = args.InvokedItemContainer as NavigationViewItem;
             if (item?.Tag == null) return;
@@ -109,9 +114,11 @@ namespace DiapStash_Plugin
 
         private async void MainWindow_Closed(object sender, WindowEventArgs args)
         {
+            // Unsubscribe from explicit event handle bounds safely on teardown
+            NavView.ItemInvoked -= NavView_ItemInvokedHandler;
             JakeyTtsClient.Instance.LogReceived -= OnLogReceived;
-            await JakeyTtsClient.Instance.StopAsync();
 
+            await JakeyTtsClient.Instance.StopAsync();
             (_portalPage as PortalPage)?.ShutdownServer();
         }
     }

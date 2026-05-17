@@ -28,6 +28,7 @@ namespace DiapStash_Plugin
         public string ProductName { get; set; } = "Standard Diaper Product";
         public string Size { get; set; } = "N/A";
         public string VariantId { get; set; } = string.Empty;
+        public string ImageUrl { get; set; } = string.Empty;
         public int TypeId { get; set; }
         public int Wetness { get; set; }
         public int MessyLevel { get; set; }
@@ -299,7 +300,6 @@ namespace DiapStash_Plugin
             }
             catch (IOException ioEx)
             {
-                // FIXED: Changed undefined variable context tracking reference 'iconPath' to point to endpoint URL error data strings
                 System.Diagnostics.Debug.WriteLine($"ℹ️ Ignored redundant network socket abort exception: {ioEx.Message}");
                 return (fallbackName, "");
             }
@@ -317,7 +317,10 @@ namespace DiapStash_Plugin
 
             try
             {
-                using var request = CreateAuthenticatedRequest(HttpMethod.Get, "api/v1/history/changes");
+                // FIXED: Appended pagination parameters to force descending chronological sorting right from page 0
+                string paginatedUrl = "api/v1/history/changes?page=0&size=10&sort=startTime,DESC";
+
+                using var request = CreateAuthenticatedRequest(HttpMethod.Get, paginatedUrl);
                 using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
                 if ((int)response.StatusCode == 429)
@@ -344,9 +347,11 @@ namespace DiapStash_Plugin
                     return null;
                 }
 
+                // Since we request DESC sorting, index 0 is guaranteed to hold the true absolute latest event frame entry
                 JsonElement latestNode = dataArray[0];
                 DateTime maxStartTime = DateTime.MinValue;
 
+                // Precision fallback verification iteration sequence loop
                 foreach (var node in dataArray.EnumerateArray())
                 {
                     if (node.TryGetProperty("startTime", out var stProp) && stProp.ValueKind == JsonValueKind.String)
@@ -405,7 +410,8 @@ namespace DiapStash_Plugin
 
                     var metadata = await FetchDiaperTypeMetadataAsync(stateResult.TypeId, stateResult.VariantId);
                     stateResult.ProductName = metadata.FullName;
-                    stateResult.VariantId = metadata.ImageUrl;
+
+                    stateResult.ImageUrl = metadata.ImageUrl;
                 }
 
                 return stateResult;

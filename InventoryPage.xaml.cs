@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace DiapStash_Plugin
@@ -18,10 +19,9 @@ namespace DiapStash_Plugin
             string currentToken = settings.Values["SavedStashToken"]?.ToString() ?? "";
             string currentClientId = settings.Values["SavedClientId"]?.ToString() ?? "";
 
-            // FIXED: Intercept missing configuration credentials explicitly inside this module view layer
+            // Evaluate configuration credentials state parameters synchronously instantly
             if (string.IsNullOrEmpty(currentToken) || string.IsNullOrEmpty(currentClientId))
             {
-                CatalogScrollViewer.Visibility = Visibility.Collapsed;
                 InventoryInfoBar.Title = "Authentication Required";
                 InventoryInfoBar.Message = "⚠️ Not logged in. Please configure your Client ID and execute loopback authentication via Dashboard or Portal first.";
                 InventoryInfoBar.Severity = InfoBarSeverity.Error;
@@ -31,45 +31,60 @@ namespace DiapStash_Plugin
             }
 
             DiapStashClient.Instance.ConfigureAuthentication(currentToken, currentClientId);
-            var stockItemsList = await DiapStashClient.Instance.FetchCurrentStockItemsAsync();
 
-            // Intercept 429 Too Many Requests structural limits bounds
-            if (DiapStashClient.Instance.IsRateLimited)
+            try
             {
-                CatalogScrollViewer.Visibility = Visibility.Collapsed;
-                InventoryInfoBar.Title = "Rate Limited (429)";
-                InventoryInfoBar.Message = "⚠️ Too many requests! API limit reached. Core endpoint cooldown threshold active. Try again later.";
-                InventoryInfoBar.Severity = InfoBarSeverity.Warning;
-                InventoryInfoBar.IsOpen = true;
-                InventoryCardsGrid.ItemsSource = null;
-                return;
-            }
+                // Fetch stock items from the background network worker stack safely
+                var stockItemsList = await DiapStashClient.Instance.FetchCurrentStockItemsAsync();
 
-            // FIXED: Verify if endpoint processing returned empty arrays due to token dropping / expired contexts (401 response)
-            if (stockItemsList == null || stockItemsList.Count == 0)
-            {
-                CatalogScrollViewer.Visibility = Visibility.Collapsed;
-                InventoryInfoBar.Title = "Session Unauthorized";
-                InventoryInfoBar.Message = "❌ API authorization failed. Token context rejected or expired. Execute Portal Login to re-authenticate.";
-                InventoryInfoBar.Severity = InfoBarSeverity.Error;
-                InventoryInfoBar.IsOpen = true;
-                InventoryCardsGrid.ItemsSource = null;
-                return;
-            }
+                if (this.DispatcherQueue == null) return;
 
-            // Reset visibility states upon successful sync response processing loops
-            InventoryInfoBar.IsOpen = false;
-            CatalogScrollViewer.Visibility = Visibility.Visible;
-
-            foreach (var item in stockItemsList)
-            {
-                if (string.IsNullOrWhiteSpace(item.ImageUrl))
+                this.DispatcherQueue.TryEnqueue(() =>
                 {
-                    item.ImageUrl = "ms-appx:///Assets/StoreLogo.png";
-                }
-            }
+                    // Catch thread execution anomalies if controls are missing
+                    if (InventoryInfoBar == null || InventoryCardsGrid == null) return;
 
-            InventoryCardsGrid.ItemsSource = stockItemsList;
+                    if (DiapStashClient.Instance.IsRateLimited)
+                    {
+                        InventoryInfoBar.Title = "Rate Limited (429)";
+                        InventoryInfoBar.Message = "⚠️ Too many requests! API limit reached. Core endpoint cooldown threshold active. Try again later.";
+                        InventoryInfoBar.Severity = InfoBarSeverity.Warning;
+                        InventoryInfoBar.IsOpen = true;
+                        InventoryCardsGrid.ItemsSource = null;
+                        return;
+                    }
+
+                    if (stockItemsList == null || stockItemsList.Count == 0)
+                    {
+                        InventoryInfoBar.Title = "Session Unauthorized";
+                        InventoryInfoBar.Message = "❌ API authorization failed. Token context rejected, empty or expired. Execute Portal Login to re-authenticate.";
+                        InventoryInfoBar.Severity = InfoBarSeverity.Error;
+                        InventoryInfoBar.IsOpen = true;
+                        InventoryCardsGrid.ItemsSource = null;
+                        return;
+                    }
+
+                    // Clear error notifications upon clean data validation response checks
+                    InventoryInfoBar.IsOpen = false;
+
+                    // Fallback injection to replace empty image paths with a standard local asset link path directly
+                    foreach (var item in stockItemsList)
+                    {
+                        if (string.IsNullOrWhiteSpace(item.ImageUrl) || !item.ImageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Injects local icon asset link directly if CDN thumbnail field returns empty string values
+                            item.ImageUrl = "ms-appx:///Assets/StoreLogo.png";
+                        }
+                    }
+
+                    // Feed collection directly straight to the UI item grid source binding list context
+                    InventoryCardsGrid.ItemsSource = stockItemsList;
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ Catalog data dispatch processing loop aborted: {ex.Message}");
+            }
         }
 
         private void RefreshStock_Click(object sender, RoutedEventArgs e)
@@ -79,6 +94,8 @@ namespace DiapStash_Plugin
 
         private async void InspectRawStock_Click(object sender, RoutedEventArgs e)
         {
+            if (RawStockDiagnosticBox == null) return;
+
             RawStockDiagnosticBox.Visibility = Visibility.Visible;
             RawStockDiagnosticBox.Text = "⌛ Requesting raw catalog payloads stream...";
             string rawJson = await DiapStashClient.Instance.GetRawEndpointDataAsync("api/v1/stock/disposables");
