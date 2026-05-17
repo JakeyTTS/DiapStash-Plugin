@@ -1,7 +1,8 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using System;
 using System.IO;
+using System.Threading.Tasks;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace DiapStash_Plugin
 {
@@ -22,8 +23,7 @@ namespace DiapStash_Plugin
 
             ExtendsContentIntoTitleBar = false;
 
-            // FIXED: Explicitly register the ItemInvoked event directly in C# code-behind 
-            // to bypass silent XAML event binding drops completely!
+            // Registro explícito del evento en el código subyacente
             NavView.ItemInvoked += NavView_ItemInvokedHandler;
 
             IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -51,7 +51,12 @@ namespace DiapStash_Plugin
             MainContentFrame.Content = _homePage;
         }
 
-        // FIXED: Renamed to clear out residual XAML-generated binding code and explicitly defined handler parameters
+        // 💡 SOLUCIÓN AL ERROR: Método público expuesto para que HomePage pueda acceder a la instancia de PortalPage y refrescar tokens
+        public UserControl GetPortalPageInstance()
+        {
+            return _portalPage;
+        }
+
         private void NavView_ItemInvokedHandler(NavigationView sender, NavigationViewItemInvokedEventArgs args)
         {
             var item = args.InvokedItemContainer as NavigationViewItem;
@@ -112,13 +117,22 @@ namespace DiapStash_Plugin
 
         private void OnLogReceived(string message) => Log(message);
 
-        private async void MainWindow_Closed(object sender, WindowEventArgs args)
+        private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
-            // Unsubscribe from explicit event handle bounds safely on teardown
+            // Desuscripción segura de eventos en el desmontaje
             NavView.ItemInvoked -= NavView_ItemInvokedHandler;
             JakeyTtsClient.Instance.LogReceived -= OnLogReceived;
 
-            await JakeyTtsClient.Instance.StopAsync();
+            // Ejecución sin bloqueo para evitar advertencias de async/void en eventos de ciclo de vida de WinUI 3
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await JakeyTtsClient.Instance.StopAsync();
+                }
+                catch { }
+            });
+
             (_portalPage as PortalPage)?.ShutdownServer();
         }
     }

@@ -11,7 +11,7 @@ namespace DiapStash_Plugin
         private LogWindow? _floatingLogWindow;
         private string _cachedTtsUrl = "ws://localhost:8889/";
 
-        // FIXED: Static historical log cache container to store backend worker context logs securely across window lifecycles
+        // Static historical log cache container to store backend worker context logs securely across window lifecycles
         public static readonly List<string> LogCacheBacklog = new List<string>();
 
         public HomePage()
@@ -54,6 +54,24 @@ namespace DiapStash_Plugin
                 return;
             }
 
+            // FIXED: If the payload is null, try to execute an automated silent background refresh token sequence
+            if (payloadCheck == null)
+            {
+                AppendLog("⏳ Access token expired or rejected. Attempting automated silent refresh cycle sequence...");
+
+                var portalInstance = MainWindow.Instance?.GetPortalPageInstance() as PortalPage;
+                if (portalInstance != null)
+                {
+                    bool refreshSuccess = await portalInstance.RefreshAccessTokenAsync();
+                    if (refreshSuccess)
+                    {
+                        AppendLog("✨ Token renewed successfully! Retrying state data synchronization sequence...");
+                        payloadCheck = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync();
+                    }
+                }
+            }
+
+            // If it's still null after the refresh attempt, drop out and show the login button
             if (payloadCheck == null)
             {
                 UpdateStatusUi("Session expired (401 Unauthorized). Re-authenticate via portal.", showConfigure: false, showLogin: true, showTts: false);
@@ -124,7 +142,7 @@ namespace DiapStash_Plugin
             lock (LogCacheBacklog)
             {
                 LogCacheBacklog.Add(logLine);
-                if (LogCacheBacklog.Count > 500) LogCacheBacklog.RemoveAt(0); 
+                if (LogCacheBacklog.Count > 500) LogCacheBacklog.RemoveAt(0);
             }
 
             _floatingLogWindow?.AppendLog(message);

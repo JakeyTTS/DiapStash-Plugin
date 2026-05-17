@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -13,13 +14,17 @@ namespace DiapStash_Plugin
     public partial class PortalPage : UserControl
     {
         private HttpListener? _oauthListener;
-        private readonly HttpClient _tokenHttpClient = new HttpClient();
+
+        // Custom development handler bypassing local TLS validation errors during authorization handshakes
+        private readonly HttpClient _tokenHttpClient = new HttpClient(new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+        });
 
         public PortalPage()
         {
             this.InitializeComponent();
 
-            // Load persisted client parameters from local app storage boundaries upon initializing
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
             ClientIdBox.Text = settings.Values["SavedClientId"]?.ToString() ?? "";
             ClientSecretBox.Password = settings.Values["SavedClientSecret"]?.ToString() ?? "";
@@ -37,7 +42,6 @@ namespace DiapStash_Plugin
                 return;
             }
 
-            // Save variables to avoid input data dropping on tab selection swaps
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
             settings.Values["SavedClientId"] = clientId;
             settings.Values["SavedClientSecret"] = clientSecret;
@@ -52,11 +56,10 @@ namespace DiapStash_Plugin
                 _oauthListener.Start();
 
                 string redirectUri = Uri.EscapeDataString("http://localhost:8888/");
-                // Requesting scope permissions for all operational sub-modules simultaneously
+                // Explicitly requesting offline_access to retrieve a persistent refresh_token
                 string scope = Uri.EscapeDataString("cloud-sync.stock cloud-sync.history cloud-sync.types offline_access");
                 string loginUrl = $"https://account.diapstash.com/oidc/auth?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope={scope}";
 
-                // Fire default system browser to launch secure OAuth authorization window frames
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(loginUrl) { UseShellExecute = true });
 
                 HttpListenerContext context;
@@ -66,11 +69,9 @@ namespace DiapStash_Plugin
                 }
                 catch (Exception ex) when (ex is ObjectDisposedException || ex is HttpListenerException)
                 {
-                    // Catch internal native queue drops gracefully if execution aborts early
                     return;
                 }
 
-                // Filter browser side-channel noise requests safely
                 if (context.Request.Url?.AbsolutePath.Contains("favicon.ico") == true)
                 {
                     context.Response.StatusCode = 404;
@@ -88,16 +89,15 @@ namespace DiapStash_Plugin
                     return;
                 }
 
+                // Parse the code out of the loopback redirect query parameters array cleanly
                 string code = context.Request.QueryString["code"] ?? "";
 
                 byte[] htmlFeedback = Encoding.UTF8.GetBytes("<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>✓ Link Successful!</h2><p>You can close this tab safely and return to the Application panel layout.</p></body></html>");
                 context.Response.OutputStream.Write(htmlFeedback, 0, htmlFeedback.Length);
 
-                // Flush underlying buffers cleanly before touching listener pipeline switches
                 await context.Response.OutputStream.FlushAsync();
                 context.Response.Close();
 
-                // Stop listening to NEW connection inbound requests, but leave the handle structure intact
                 if (_oauthListener != null && _oauthListener.IsListening)
                 {
                     _oauthListener.Stop();
@@ -115,7 +115,6 @@ namespace DiapStash_Plugin
             }
             finally
             {
-                // Clean up references safely and bring back button controls
                 ShutdownServer();
                 AuthBtn.IsEnabled = true;
             }
@@ -128,49 +127,160 @@ namespace DiapStash_Plugin
                 var bodyParams = new System.Collections.Generic.Dictionary<string, string>
                 {
                     { "grant_type", "authorization_code" },
-                    { "client_id", clientId },
-                    { "client_secret", clientSecret },
                     { "code", code },
                     { "redirect_uri", "http://localhost:8888/" }
                 };
 
-                var response = await _tokenHttpClient.PostAsync("https://account.diapstash.com/oidc/token", new FormUrlEncodedContent(bodyParams));
+                using var request = new HttpRequestMessage(HttpMethod.Post, "https://account.diapstash.com/oidc/token");
+                request.Content = new FormUrlEncodedContent(bodyParams);
+
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                request.Headers.TryAddWithoutValidation("User-Agent", "JakeyTTS-DiapStash-Plugin/1.0.0 (WinUI3; .NET)");
+
+                string rawCredentials = $"{clientId}:{clientSecret}";
+                string base64Credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(rawCredentials));
+                request.Headers.Authorization = new AuthenticationHeaderValue("Basic", base64Credentials);
+
+                // FIXED: Log full outgoing envelope tracking parameters for context confirmation
+                var sbDebug = new StringBuilder();
+                sbDebug.AppendLine("============ 🛫 OUTGOING HTTP REQUEST DETAILS ============");
+                sbDebug.AppendLine($"URL: {request.RequestUri}");
+                sbDebug.AppendLine($"Method: {request.Method}");
+                sbDebug.AppendLine($"Header - Authorization: Basic {base64Credentials.Substring(0, Math.Min(base64Credentials.Length, 8))}...");
+                sbDebug.AppendLine($"Header - User-Agent: {request.Headers.UserAgent}");
+                sbDebug.AppendLine($"Body Content: grant_type=authorization_code&code={code.Substring(0, Math.Min(code.Length, 6))}...&redirect_uri=http://localhost:8888/");
+                sbDebug.AppendLine("=========================================================");
+                MainWindow.Instance?.Log(sbDebug.ToString());
+
+                using var response = await _tokenHttpClient.SendAsync(request);
+                string rawResponseText = await response.Content.ReadAsStringAsync();
+
+                // FIXED: Capture full response context when an anomaly or standard HTML structural envelope is intercepted
+                if (rawResponseText.Trim().StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) ||
+                    rawResponseText.Trim().StartsWith("<html", StringComparison.OrdinalIgnoreCase) ||
+                    !response.IsSuccessStatusCode)
+                {
+                    var sbErrorDump = new StringBuilder();
+                    sbErrorDump.AppendLine("============ 🛬 INCOMING VERBOSE ERROR DUMP ============");
+                    sbErrorDump.AppendLine($"HTTP Status Code: {(int)response.StatusCode} ({response.StatusCode})");
+                    sbErrorDump.AppendLine($"Reason Phrase: {response.ReasonPhrase}");
+                    sbErrorDump.AppendLine("--- Response Headers ---");
+
+                    foreach (var header in response.Headers)
+                    {
+                        sbErrorDump.AppendLine($"{header.Key}: {string.Join(", ", header.Value)}");
+                    }
+                    foreach (var header in response.Content.Headers)
+                    {
+                        sbErrorDump.AppendLine($"{header.Key}: {string.Join(", ", header.Value)}");
+                    }
+
+                    sbErrorDump.AppendLine("--- Raw HTML Document Source Payload Content ---");
+                    sbErrorDump.AppendLine(rawResponseText);
+                    sbErrorDump.AppendLine("========================================================");
+
+                    // Drop the massive text payload cleanly down into the logging framework
+                    MainWindow.Instance?.Log(sbErrorDump.ToString());
+                    return;
+                }
+
                 if (response.IsSuccessStatusCode)
                 {
-                    string rawJson = await response.Content.ReadAsStringAsync();
-                    using var doc = JsonDocument.Parse(rawJson);
-                    string token = doc.RootElement.GetProperty("access_token").GetString() ?? "";
+                    using var doc = JsonDocument.Parse(rawResponseText);
+                    string accessToken = doc.RootElement.GetProperty("access_token").GetString() ?? "";
+                    string refreshToken = doc.RootElement.TryGetProperty("refresh_token", out var rfProp) ? rfProp.GetString() ?? "" : "";
 
                     var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
-                    localSettings.Values["SavedStashToken"] = token;
+                    localSettings.Values["SavedStashToken"] = accessToken;
+                    if (!string.IsNullOrEmpty(refreshToken))
+                    {
+                        localSettings.Values["SavedRefreshToken"] = refreshToken;
+                    }
 
-                    DiapStashClient.Instance.ConfigureAuthentication(token, clientId);
+                    DiapStashClient.Instance.ConfigureAuthentication(accessToken, clientId);
 
-                    // Re-route back to the Main UI thread using DispatcherQueue to set WinUI 3 control fields
                     if (this.DispatcherQueue != null)
                     {
                         this.DispatcherQueue.TryEnqueue(() =>
                         {
-                            StashTokenBox.Text = token;
+                            StashTokenBox.Text = accessToken;
                         });
                     }
 
                     MainWindow.Instance?.Log("✨ Handshake finalized. DiapStash active token persistent across future runtime sessions.");
                 }
-                else
-                {
-                    MainWindow.Instance?.Log($"❌ Token request failed. Server response code: {response.StatusCode}");
-                }
             }
             catch (Exception ex)
             {
-                MainWindow.Instance?.Log($"❌ HTTP token request execution failed: {ex.Message}");
+                MainWindow.Instance?.Log($"❌ HTTP token request execution exception critically thrown: {ex.Message}");
             }
+        }
+
+        // FIXED: Added dedicated Access Token Refresh implementation matching documentation rules
+        public async Task<bool> RefreshAccessTokenAsync()
+        {
+            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
+            string clientId = settings.Values["SavedClientId"]?.ToString() ?? "";
+            string clientSecret = settings.Values["SavedClientSecret"]?.ToString() ?? "";
+            string refreshToken = settings.Values["SavedRefreshToken"]?.ToString() ?? "";
+
+            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret) || string.IsNullOrEmpty(refreshToken))
+            {
+                return false;
+            }
+
+            try
+            {
+                var bodyParams = new System.Collections.Generic.Dictionary<string, string>
+                {
+                    { "grant_type", "refresh_token" },
+                    { "refresh_token", refreshToken }
+                };
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, "https://account.diapstash.com/oidc/token");
+                request.Content = new FormUrlEncodedContent(bodyParams);
+
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                string rawCredentials = $"{clientId}:{clientSecret}";
+                string base64Credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(rawCredentials));
+                request.Headers.Authorization = new AuthenticationHeaderValue("Basic", base64Credentials);
+
+                using var response = await _tokenHttpClient.SendAsync(request);
+                if (response.IsSuccessStatusCode)
+                {
+                    string rawJson = await response.Content.ReadAsStringAsync();
+                    using var doc = JsonDocument.Parse(rawJson);
+
+                    string newAccessToken = doc.RootElement.GetProperty("access_token").GetString() ?? "";
+                    string newRefreshToken = doc.RootElement.TryGetProperty("refresh_token", out var rfProp) ? rfProp.GetString() ?? "" : "";
+
+                    settings.Values["SavedStashToken"] = newAccessToken;
+                    if (!string.IsNullOrEmpty(newRefreshToken))
+                    {
+                        settings.Values["SavedRefreshToken"] = newRefreshToken;
+                    }
+
+                    DiapStashClient.Instance.ConfigureAuthentication(newAccessToken, clientId);
+
+                    if (this.DispatcherQueue != null)
+                    {
+                        this.DispatcherQueue.TryEnqueue(() =>
+                        {
+                            StashTokenBox.Text = newAccessToken;
+                        });
+                    }
+
+                    MainWindow.Instance?.Log("🔄 Access token refreshed successfully using background persistent refresh tokens.");
+                    return true;
+                }
+            }
+            catch { }
+            return false;
         }
 
         public void ShutdownServer()
         {
-            // Isolated teardown block preventing abrupt HttpRequestQueue structural exceptions
             try
             {
                 if (_oauthListener != null)
@@ -179,11 +289,11 @@ namespace DiapStash_Plugin
                     {
                         _oauthListener.Stop();
                     }
-                    _oauthListener.Close(); // Safely teardown handles now that execution is complete
+                    _oauthListener.Close();
                     _oauthListener = null;
                 }
             }
-            catch { /* Suppress race conditions occurring on system channel teardowns */ }
+            catch { }
         }
     }
 }
