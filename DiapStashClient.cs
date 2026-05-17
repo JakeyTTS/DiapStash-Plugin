@@ -33,11 +33,9 @@ namespace DiapStash_Plugin
         public int MessyLevel { get; set; }
         public bool HasLeak { get; set; }
 
-        // FIXED: Escala sobre 5 con cálculo de porcentaje matemático
         public string WetnessDisplay => Wetness > 0 ? $"{Wetness}/5" : "Dry";
         public int WetnessPercentage => Wetness > 0 ? (int)Math.Round((Wetness / 5.0) * 100) : 0;
 
-        // FIXED: Escala corregida a 3 con cálculo de porcentaje matemático
         public string MessyDisplay => MessyLevel > 0 ? $"{MessyLevel}/3" : "Clean";
         public int MessyPercentage => MessyLevel > 0 ? (int)Math.Round((MessyLevel / 3.0) * 100) : 0;
     }
@@ -50,6 +48,8 @@ namespace DiapStash_Plugin
         private readonly HttpClient _httpClient;
         private string _accessToken = string.Empty;
         private string _clientId = string.Empty;
+
+        public bool IsRateLimited { get; private set; }
 
         private readonly Dictionary<int, (string FullName, string ImageUrl)> _typeMetadataCache =
             new Dictionary<int, (string FullName, string ImageUrl)>();
@@ -102,6 +102,12 @@ namespace DiapStash_Plugin
                 using var request = CreateAuthenticatedRequest(HttpMethod.Get, endpointUrl);
                 using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
+                if ((int)response.StatusCode == 429)
+                {
+                    IsRateLimited = true;
+                    return "⚠️ Cooldown Active (429): Too many requests. Wait a moment.";
+                }
+
                 string rawJson;
                 try
                 {
@@ -145,7 +151,15 @@ namespace DiapStash_Plugin
                 using var request = CreateAuthenticatedRequest(HttpMethod.Get, targetEndpoint);
                 using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
+                if ((int)response.StatusCode == 429)
+                {
+                    IsRateLimited = true;
+                    return list;
+                }
+
                 if (!response.IsSuccessStatusCode) return list;
+
+                IsRateLimited = false;
 
                 string rawJson;
                 try
@@ -231,6 +245,12 @@ namespace DiapStash_Plugin
                 using var request = CreateAuthenticatedRequest(HttpMethod.Get, $"api/v1/type/types/{typeId}");
                 using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
+                if ((int)response.StatusCode == 429)
+                {
+                    IsRateLimited = true;
+                    return (fallbackName, "");
+                }
+
                 if (!response.IsSuccessStatusCode) return (fallbackName, "");
 
                 string rawJson;
@@ -279,6 +299,7 @@ namespace DiapStash_Plugin
             }
             catch (IOException ioEx)
             {
+                // FIXED: Changed undefined variable context tracking reference 'iconPath' to point to endpoint URL error data strings
                 System.Diagnostics.Debug.WriteLine($"ℹ️ Ignored redundant network socket abort exception: {ioEx.Message}");
                 return (fallbackName, "");
             }
@@ -301,10 +322,13 @@ namespace DiapStash_Plugin
 
                 if ((int)response.StatusCode == 429)
                 {
+                    IsRateLimited = true;
                     return new DiapStashChangeState { ProductName = "⚠️ Cooldown Active (429)", Note = "Too many requests. Wait a moment." };
                 }
 
                 if (!response.IsSuccessStatusCode) return null;
+
+                IsRateLimited = false;
 
                 string rawJson;
                 try

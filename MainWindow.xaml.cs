@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.IO;
 
 namespace DiapStash_Plugin
 {
@@ -24,9 +25,19 @@ namespace DiapStash_Plugin
             IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+
             if (appWindow != null)
             {
-                appWindow.SetIcon("Assets/StoreLogo.scale-400.png"); 
+                string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "appicon.ico");
+
+                if (File.Exists(iconPath))
+                {
+                    appWindow.SetIcon(iconPath);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"⚠️ Icon not found at target physical path: {iconPath}");
+                }
             }
 
             JakeyTtsClient.Instance.LogReceived += OnLogReceived;
@@ -41,7 +52,30 @@ namespace DiapStash_Plugin
             var item = args.InvokedItemContainer as NavigationViewItem;
             if (item?.Tag == null) return;
 
-            switch (item.Tag.ToString())
+            HandleNavigation(item.Tag.ToString());
+        }
+
+        public void NavigateToPage(string pageTag)
+        {
+            if (this.DispatcherQueue == null) return;
+
+            this.DispatcherQueue.TryEnqueue(() =>
+            {
+                foreach (var menuItem in NavView.MenuItems)
+                {
+                    if (menuItem is NavigationViewItem item && item.Tag?.ToString() == pageTag)
+                    {
+                        NavView.SelectedItem = item;
+                        HandleNavigation(pageTag);
+                        break;
+                    }
+                }
+            });
+        }
+
+        private void HandleNavigation(string pageTag)
+        {
+            switch (pageTag)
             {
                 case "Home":
                     MainContentFrame.Content = _homePage;

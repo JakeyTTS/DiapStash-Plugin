@@ -1,12 +1,38 @@
-﻿using System.Collections.ObjectModel;
+﻿using System;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
 
 namespace DiapStash_Plugin
 {
+    // FIXED: Added a custom converter targeting parameter bounds mapping ranges to handle dynamic 3 vs 5 element scales rules
+    public class TargetVariableToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is string currentVariable && parameter is string limitType)
+            {
+                // Messy filters index ranges strictly capped to maximum value of 3 (hides level 4 and 5 controls)
+                if (limitType == "Wetness" && currentVariable == "Messy")
+                {
+                    return Visibility.Collapsed;
+                }
+                return Visibility.Visible;
+            }
+            return Visibility.Visible;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
     public class TtsClause : INotifyPropertyChanged
     {
-        private string _logicalOperator = "IF"; // IF, AND, ELSE IF
+        private string _logicalOperator = "IF";
         private string _targetVariable = "Leak";
         private string _conditionType = "Equals";
         private string _targetValue = "YES";
@@ -22,7 +48,6 @@ namespace DiapStash_Plugin
                     _logicalOperator = value;
                     OnPropertyChanged();
 
-                    // FIXED: Al pasar a ser un operador de continuidad 'AND', vaciamos el texto para evitar redundancias
                     if (_logicalOperator == "AND")
                     {
                         OutputMessage = string.Empty;
@@ -92,7 +117,7 @@ namespace DiapStash_Plugin
 
     public class TtsComplexRuleCard : INotifyPropertyChanged
     {
-        private string _cardName = "Unnamed Rule Block";
+        private string _cardName = "unnamed_rule";
         public ObservableCollection<TtsClause> Clauses { get; set; } = new ObservableCollection<TtsClause>();
 
         public string CardName

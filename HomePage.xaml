@@ -7,17 +7,24 @@
     mc:Ignorable="d">
 
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="24">
 
-        <TextBlock Text="System Console Logging Telemetry" Style="{StaticResource SubtitleTextBlockStyle}" FontWeight="Bold" Margin="0,0,0,15"/>
+            <Image Source="ms-appx:///Assets/StoreLogo.png" Width="120" Height="120" Stretch="Uniform" HorizontalAlignment="Center"/>
 
-        <Border Grid.Row="1" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
-            <ScrollViewer x:Name="LogScroll" Padding="15" VerticalScrollBarVisibility="Auto">
-                <TextBox x:Name="LogBlock" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" PlaceholderText="Awaiting thread execution logs..." BorderThickness="0" Background="Transparent" FontSize="12" FontFamily="Cascadia Code, Consolas"/>
-            </ScrollViewer>
-        </Border>
+            <StackPanel Spacing="6" HorizontalAlignment="Center">
+                <TextBlock Text="DiapStash Automation Hub" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="StatusMessageLabel" Text="Validating API infrastructure context..." FontSize="13" Opacity="0.6" HorizontalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+                <ProgressRing x:Name="StatusLoadingRing" IsActive="True" Width="24" Height="24" VerticalAlignment="Center"/>
+                <Button x:Name="ConfigureApiBtn" Content="⚙️ Configure Client ID" Click="ConfigureApi_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}" Padding="24,8,24,8"/>
+                <Button x:Name="LoginPortalBtn" Content="🔐 Execute Portal Login" Click="LoginPortal_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}" Padding="24,8,24,8"/>
+
+                <Button x:Name="ConnectTtsBtn" Content="🔌 Connect JakeyTTS" Click="ConnectTts_Click" Visibility="Collapsed" Style="{StaticResource DefaultButtonStyle}" Padding="24,8,24,8"/>
+            </StackPanel>
+        </StackPanel>
+
+        <Button Content="📋 View Telemetry Logs" Click="OpenFloatingLog_Click" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,10" Style="{StaticResource DefaultButtonStyle}"/>
     </Grid>
 </UserControl>

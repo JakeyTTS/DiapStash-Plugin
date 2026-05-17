@@ -95,8 +95,8 @@
                     <InfoBar x:Name="NoActiveSessionInfoBar" Severity="Informational" Title="Timeline Idle" Message="Awaiting active sequence signals." IsOpen="True" IsClosable="False"/>
 
                     <StackPanel Spacing="10" Margin="0,5,0,0">
-                        <TextBlock Text="Default DiapStash Response Blueprint" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"/>
-                        <TextBlock Text="Design the primary core message framework. Drop your independent {diapstash_rule_[name]} tokens into this container." FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
+                        <TextBlock Text="Default DiapStash Response Blueprint {diapstash_change}" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"/>
+                        <TextBlock Text="Design the primary core message notification read out loud by JakeyTTS. To include your conditional rules configured down below, remember to drop their exact dynamic token handle tag (e.g. {diapstash_rule_myruleblockname}) into this framework container." FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
                         <TextBox x:Name="CustomTtsTemplateBox" Header="Core DiapStash Notification Template" Height="70" TextWrapping="Wrap" AcceptsReturn="True"/>
                         <Button x:Name="SaveTemplateBtn" Content="Save Core Response Framework" Click="SaveTtsTemplate_Click" Style="{StaticResource AccentButtonStyle}" Width="240"/>
                     </StackPanel>
@@ -107,7 +107,7 @@
                         <Grid>
                             <StackPanel Spacing="2">
                                 <TextBlock Text="🎛️ Conditional Rule Injector Matrix" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"/>
-                                <TextBlock Text="Create complex conditional trees (IF / AND / ELSE IF) inside isolated card blocks." FontSize="12" Opacity="0.6"/>
+                                <TextBlock Text="Create complex conditional trees (IF / AND / ELSE IF) inside isolated card blocks. Click on the block headers to edit their identifier tag string." FontSize="12" Opacity="0.6"/>
                             </StackPanel>
                             <Button Content="➕ Add New Rule Block Card" Click="AddRule_Click" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource AccentButtonStyle}"/>
                         </Grid>
@@ -119,9 +119,11 @@
                                         <StackPanel Spacing="12">
 
                                             <Grid>
-                                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE9E9;" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource SystemAccentColor}"/>
-                                                    <TextBox Text="{Binding CardName, Mode=TwoWay}" PlaceholderText="BlockName (e.g. AlertaFuga)" FontWeight="Bold" Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center" FontSize="14"/>
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE9E9;" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource SystemAccentColor}" Margin="0,0,6,0"/>
+                                                    <TextBlock Text="{}{diapstash_rule_" VerticalAlignment="Center" FontSize="14" FontWeight="Bold" Opacity="0.5"/>
+                                                    <TextBox Text="{Binding CardName, Mode=TwoWay}" PlaceholderText="blockname" FontWeight="Black" Foreground="{ThemeResource SystemAccentColor}" Background="{ThemeResource ControlOnImageFillColorDefaultBrush}" BorderThickness="0,0,0,1" Padding="4,2,4,2" VerticalAlignment="Center" FontSize="14"/>
+                                                    <TextBlock Text="}" VerticalAlignment="Center" FontSize="14" FontWeight="Bold" Opacity="0.5"/>
                                                 </StackPanel>
 
                                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
@@ -179,8 +181,8 @@
                                                                     <ComboBoxItem Content="1"/>
                                                                     <ComboBoxItem Content="2"/>
                                                                     <ComboBoxItem Content="3"/>
-                                                                    <ComboBoxItem Content="4" Visibility="{Binding IsNumericControl, Converter={StaticResource BoolToVis}}"/>
-                                                                    <ComboBoxItem Content="5" Visibility="{Binding IsNumericControl, Converter={StaticResource BoolToVis}}"/>
+                                                                    <ComboBoxItem Content="4" Visibility="{Binding TargetVariable, Converter={StaticResource BoolToVis}, ConverterParameter=Wetness}"/>
+                                                                    <ComboBoxItem Content="5" Visibility="{Binding TargetVariable, Converter={StaticResource BoolToVis}, ConverterParameter=Wetness}"/>
                                                                 </ComboBox>
                                                             </Grid>
 

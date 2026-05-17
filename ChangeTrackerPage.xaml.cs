@@ -12,8 +12,6 @@ namespace DiapStash_Plugin
             this.InitializeComponent();
 
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-
-            // FIXED: Modificado para indicar explícitamente que es el mensaje base por defecto de DiapStash
             string defaultTemplate = "[DiapStash Default Notification] Status: {diapstash_status}. Item: {diapstash_product} (Size {diapstash_size}). Wetness: {diapstash_wetness}, Mess: {diapstash_messy}. Active Runtime: {diapstash_elapsed}.";
             CustomTtsTemplateBox.Text = settings.Values["SavedTtsTemplate"]?.ToString() ?? defaultTemplate;
 
@@ -27,18 +25,38 @@ namespace DiapStash_Plugin
             string currentToken = settings.Values["SavedStashToken"]?.ToString() ?? "";
             string currentClientId = settings.Values["SavedClientId"]?.ToString() ?? "";
 
+            // FIXED: Intercept missing configuration parameters when opening this module screen layout panel
             if (string.IsNullOrEmpty(currentToken) || string.IsNullOrEmpty(currentClientId))
             {
-                NoActiveSessionInfoBar.Message = "⚠️ Authentication credentials missing. Link your client portal context.";
+                StatusCardFrame.Visibility = Visibility.Collapsed;
+                NoActiveSessionInfoBar.Title = "Authentication Required";
+                NoActiveSessionInfoBar.Message = "⚠️ Not logged in. Please verify your Client parameters and execute Portal Login initialization routines.";
+                NoActiveSessionInfoBar.Severity = InfoBarSeverity.Error;
+                NoActiveSessionInfoBar.IsOpen = true;
                 return;
             }
 
             DiapStashClient.Instance.ConfigureAuthentication(currentToken, currentClientId);
             var statePayload = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync();
 
+            // FIXED: Handle 429 Too Many Requests error statuses on the tracking page natively
+            if (DiapStashClient.Instance.IsRateLimited)
+            {
+                StatusCardFrame.Visibility = Visibility.Collapsed;
+                NoActiveSessionInfoBar.Title = "Rate Limited (429)";
+                NoActiveSessionInfoBar.Message = "⚠️ Too many requests! API limit reached. Core endpoint cooldown threshold active. Try again later.";
+                NoActiveSessionInfoBar.Severity = InfoBarSeverity.Warning;
+                NoActiveSessionInfoBar.IsOpen = true;
+                return;
+            }
+
+            // FIXED: Verify if payloads returned empty context profiles due to expired credentials or token drops (401 responses)
             if (statePayload == null)
             {
                 StatusCardFrame.Visibility = Visibility.Collapsed;
+                NoActiveSessionInfoBar.Title = "Session Unauthorized";
+                NoActiveSessionInfoBar.Message = "❌ API authorization failed. Token context rejected or expired. Execute Portal Login to re-authenticate.";
+                NoActiveSessionInfoBar.Severity = InfoBarSeverity.Error;
                 NoActiveSessionInfoBar.IsOpen = true;
                 return;
             }

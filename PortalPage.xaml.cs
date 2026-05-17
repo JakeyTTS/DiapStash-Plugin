@@ -19,6 +19,7 @@ namespace DiapStash_Plugin
         {
             this.InitializeComponent();
 
+            // Load persisted client parameters from local app storage boundaries upon initializing
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
             ClientIdBox.Text = settings.Values["SavedClientId"]?.ToString() ?? "";
             ClientSecretBox.Password = settings.Values["SavedClientSecret"]?.ToString() ?? "";
@@ -36,6 +37,7 @@ namespace DiapStash_Plugin
                 return;
             }
 
+            // Save variables to avoid input data dropping on tab selection swaps
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
             settings.Values["SavedClientId"] = clientId;
             settings.Values["SavedClientSecret"] = clientSecret;
@@ -50,9 +52,11 @@ namespace DiapStash_Plugin
                 _oauthListener.Start();
 
                 string redirectUri = Uri.EscapeDataString("http://localhost:8888/");
+                // Requesting scope permissions for all operational sub-modules simultaneously
                 string scope = Uri.EscapeDataString("cloud-sync.stock cloud-sync.history cloud-sync.types offline_access");
                 string loginUrl = $"https://account.diapstash.com/oidc/auth?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope={scope}";
 
+                // Fire default system browser to launch secure OAuth authorization window frames
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(loginUrl) { UseShellExecute = true });
 
                 HttpListenerContext context;
@@ -142,7 +146,7 @@ namespace DiapStash_Plugin
 
                     DiapStashClient.Instance.ConfigureAuthentication(token, clientId);
 
-                    // FIXED: Re-route back to the Main UI thread using DispatcherQueue to set WinUI 3 control fields
+                    // Re-route back to the Main UI thread using DispatcherQueue to set WinUI 3 control fields
                     if (this.DispatcherQueue != null)
                     {
                         this.DispatcherQueue.TryEnqueue(() =>
@@ -166,7 +170,7 @@ namespace DiapStash_Plugin
 
         public void ShutdownServer()
         {
-            // FIXED: Isolated teardown block preventing abrupt HttpRequestQueue structural exceptions
+            // Isolated teardown block preventing abrupt HttpRequestQueue structural exceptions
             try
             {
                 if (_oauthListener != null)

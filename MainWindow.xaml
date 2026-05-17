@@ -13,10 +13,10 @@
     <Grid>
         <NavigationView x:Name="NavView" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" ItemInvoked="NavView_ItemInvoked" Background="Transparent">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Dashboard Core" Tag="Home" Icon="Home"/>
-                <NavigationViewItem Content="DiapStash Portal" Tag="StashAuth" Icon="Contact"/>
-                <NavigationViewItem Content="Stash Inventory" Tag="Inventory" Icon="AllApps"/>
+                <NavigationViewItem Content="Home" Tag="Home" Icon="Home"/>
+                <NavigationViewItem Content="Inventory" Tag="Inventory" Icon="AllApps"/>
                 <NavigationViewItem Content="Change Log Stream" Tag="ChangeTracker" Icon="PostUpdate"/>
+                <NavigationViewItem Content="DiapStash Portal" Tag="StashAuth" Icon="Contact"/>
                 <NavigationViewItem Content="JakeyTTS Injections" Tag="Injections" Icon="Share"/>
             </NavigationView.MenuItems>
 
