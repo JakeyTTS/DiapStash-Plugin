@@ -21,7 +21,6 @@ namespace DiapStash_Plugin
 
         public event Action<string>? LogReceived;
 
-        // Colección jerárquica de bloques de tarjetas complejas
         public ObservableCollection<TtsComplexRuleCard> ComplexRuleCards { get; } = new ObservableCollection<TtsComplexRuleCard>();
 
         private JakeyTtsClient() { }
@@ -37,7 +36,14 @@ namespace DiapStash_Plugin
                     ComplexRuleCards.Clear();
                     if (list != null)
                     {
-                        foreach (var card in list) ComplexRuleCards.Add(card);
+                        foreach (var card in list)
+                        {
+                            foreach (var clause in card.Clauses)
+                            {
+                                clause.ParentCard = card;
+                            }
+                            ComplexRuleCards.Add(card);
+                        }
                     }
                 }
                 catch { }
@@ -50,7 +56,6 @@ namespace DiapStash_Plugin
             settings.Values["SavedComplexRulesMatrixJSON"] = JsonSerializer.Serialize(ComplexRuleCards);
         }
 
-        // RESTAURADO: Método de inicio de ciclo de conexión WebSocket
         public async Task StartAsync(string bridgeUrl)
         {
             _cts = new CancellationTokenSource();
@@ -64,7 +69,8 @@ namespace DiapStash_Plugin
 
                 await SendHandshakeAsync();
 
-                _ = Task.Run(async () => await SynchronizeJakeyGlobalVariablesAsync());
+                // Initialization handshake pulls fresh data
+                _ = Task.Run(async () => await SynchronizeJakeyGlobalVariablesAsync(forceRefresh: true));
                 _ = Task.Run(ReceiveLoopAsync);
             }
             catch (Exception ex)
@@ -73,7 +79,6 @@ namespace DiapStash_Plugin
             }
         }
 
-        // RESTAURADO: Método de parada y cierre seguro de sockets asíncronos
         public async Task StopAsync()
         {
             if (_cts != null) _cts.Cancel();
@@ -98,18 +103,18 @@ namespace DiapStash_Plugin
                     id = "diapstash-automation-plugin",
                     name = "DiapStash Integration Bridge",
                     version = "1.0.0",
-                    protocol_version = "1.0",
+                    version_protocol = "1.0",
                     subscriptions = new[] { "redeems", "commands" }
                 }
             };
             await SendJsonAsync(handshake);
         }
 
-        public async Task SynchronizeJakeyGlobalVariablesAsync()
+        public async Task SynchronizeJakeyGlobalVariablesAsync(bool forceRefresh = false)
         {
             if (_webSocket == null || _webSocket.State != WebSocketState.Open) return;
 
-            var state = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync();
+            var state = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync(forceRefresh);
             if (state == null) return;
 
             string elapsedString = "0 minutes";
@@ -120,7 +125,6 @@ namespace DiapStash_Plugin
                 elapsedString = $"{(int)diff.TotalHours} hours and {diff.Minutes} minutes";
             }
 
-            // Compilación e individualización de cada bloque de tarjeta como una macro {} independiente
             var dynamicCardTokens = new Dictionary<string, string>();
 
             foreach (var card in ComplexRuleCards)
@@ -129,10 +133,20 @@ namespace DiapStash_Plugin
 
                 bool blockEvaluatedAndPassed = false;
                 bool currentChainIsMatch = false;
-                StringBuilder cardOutputBuilder = new StringBuilder();
+                string finalCardPhrase = string.Empty;
 
                 foreach (var clause in card.Clauses)
                 {
+                    if (clause.LogicalOperator == "ELSE")
+                    {
+                        if (!blockEvaluatedAndPassed)
+                        {
+                            blockEvaluatedAndPassed = true;
+                            finalCardPhrase = clause.OutputMessage ?? string.Empty;
+                        }
+                        break;
+                    }
+
                     bool clauseIsTrue = false;
                     string actualValue = clause.TargetVariable switch
                     {
@@ -159,44 +173,31 @@ namespace DiapStash_Plugin
                         clauseIsTrue = string.Equals(actualValue, clause.TargetValue, StringComparison.OrdinalIgnoreCase);
                     }
 
-                    if (clause.LogicalOperator == "IF")
+                    if (clause.LogicalOperator == "IF" || clause.LogicalOperator == "ELSE IF")
                     {
+                        if (blockEvaluatedAndPassed) continue;
+
                         currentChainIsMatch = clauseIsTrue;
-                        if (currentChainIsMatch)
-                        {
-                            blockEvaluatedAndPassed = true;
-                            if (!string.IsNullOrWhiteSpace(clause.OutputMessage)) cardOutputBuilder.Append(clause.OutputMessage);
-                        }
                     }
                     else if (clause.LogicalOperator == "AND")
                     {
-                        currentChainIsMatch = currentChainIsMatch && clauseIsTrue;
-                        if (!currentChainIsMatch) blockEvaluatedAndPassed = false;
-                        if (currentChainIsMatch && !string.IsNullOrWhiteSpace(clause.OutputMessage))
-                        {
-                            if (cardOutputBuilder.Length > 0) cardOutputBuilder.Append(" ");
-                            cardOutputBuilder.Append(clause.OutputMessage);
-                        }
-                    }
-                    else if (clause.LogicalOperator == "ELSE IF")
-                    {
-                        if (blockEvaluatedAndPassed) break;
+                        if (blockEvaluatedAndPassed) continue;
 
-                        currentChainIsMatch = clauseIsTrue;
+                        currentChainIsMatch = currentChainIsMatch && clauseIsTrue;
+                    }
+
+                    if (clause.IsLastInLogicalBlock && !blockEvaluatedAndPassed)
+                    {
                         if (currentChainIsMatch)
                         {
                             blockEvaluatedAndPassed = true;
-                            if (!string.IsNullOrWhiteSpace(clause.OutputMessage)) cardOutputBuilder.Append(clause.OutputMessage);
-                            break;
+                            finalCardPhrase = clause.OutputMessage ?? string.Empty;
                         }
                     }
                 }
 
-                // Generar una clave de variable limpia basada en el nombre asignado a la tarjeta
                 string cleanCardKey = "diapstash_rule_" + card.CardName.Trim().ToLower().Replace(" ", "_");
-                string finalValue = blockEvaluatedAndPassed ? cardOutputBuilder.ToString().Trim() : string.Empty;
-
-                dynamicCardTokens.Add(cleanCardKey, finalValue);
+                dynamicCardTokens.Add(cleanCardKey, finalCardPhrase.Trim());
             }
 
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
@@ -211,7 +212,6 @@ namespace DiapStash_Plugin
             userCustomTemplate = userCustomTemplate.Replace("{diapstash_leak}", state.HasLeak ? "YES" : "NO");
             userCustomTemplate = userCustomTemplate.Replace("{diapstash_status}", state.IsActiveSession ? "Active" : "Completed");
 
-            // Reemplazar macros dinámicas personalizadas dentro del propio framework si existen
             foreach (var token in dynamicCardTokens)
             {
                 userCustomTemplate = userCustomTemplate.Replace("{" + token.Key + "}", token.Value);
@@ -219,7 +219,6 @@ namespace DiapStash_Plugin
 
             await UpdateGlobalVariableAsync("diapstash_change", userCustomTemplate);
 
-            // Registrar cada bloque de condiciones de forma independiente en la pila global de JakeyTTS
             foreach (var token in dynamicCardTokens)
             {
                 await UpdateGlobalVariableAsync(token.Key, token.Value);
@@ -235,10 +234,10 @@ namespace DiapStash_Plugin
             await UpdateGlobalVariableAsync("diapstash_leak", state.HasLeak ? "YES" : "NO");
             await UpdateGlobalVariableAsync("diapstash_status", state.IsActiveSession ? "Active" : "Completed");
 
-            string stockSummary = await DiapStashClient.Instance.FetchCurrentStockSummaryAsync();
+            string stockSummary = await DiapStashClient.Instance.FetchCurrentStockSummaryAsync(forceRefresh);
             await UpdateGlobalVariableAsync("diapstash_stock", stockSummary);
 
-            LogReceived?.Invoke("✨ Nested conditional matrix tokens individualization pipeline synchronized successfully.");
+            LogReceived?.Invoke("Base variable individualization macros updated successfully.");
         }
 
         private async Task UpdateGlobalVariableAsync(string key, string value)
@@ -284,7 +283,7 @@ namespace DiapStash_Plugin
                         string scope = root.TryGetProperty("scope", out var sProp) ? sProp.GetString() ?? "" : "";
                         if (scope == "commands" || scope == "redeems")
                         {
-                            _ = Task.Run(async () => await SynchronizeJakeyGlobalVariablesAsync());
+                            _ = Task.Run(async () => await SynchronizeJakeyGlobalVariablesAsync(forceRefresh: false));
                         }
                     }
                 }

@@ -54,7 +54,6 @@ namespace DiapStash_Plugin
                 return;
             }
 
-            // FIXED: If the payload is null, try to execute an automated silent background refresh token sequence
             if (payloadCheck == null)
             {
                 AppendLog("⏳ Access token expired or rejected. Attempting automated silent refresh cycle sequence...");
@@ -71,7 +70,6 @@ namespace DiapStash_Plugin
                 }
             }
 
-            // If it's still null after the refresh attempt, drop out and show the login button
             if (payloadCheck == null)
             {
                 UpdateStatusUi("Session expired (401 Unauthorized). Re-authenticate via portal.", showConfigure: false, showLogin: true, showTts: false);

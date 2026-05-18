@@ -15,7 +15,17 @@
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Stretch" Margin="0,0,0,15">
             <TextBlock Text="Current Catalog Inventory Statistics" Style="{StaticResource SubtitleTextBlockStyle}" FontWeight="Bold" VerticalAlignment="Center"/>
-            <Button x:Name="RefreshBtn" Content="Refresh Catalog" Click="RefreshStock_Click" Margin="20,0,0,0"/>
+
+            <ToggleSwitch x:Name="StockFilterToggle" 
+                          Header="Filter Instock Only" 
+                          IsOn="True" 
+                          Toggled="StockFilterToggle_Toggled" 
+                          Margin="25,-5,0,0" 
+                          VerticalAlignment="Center"
+                          OnContent="Active Stock" 
+                          OffContent="Show All Registry"/>
+
+            <Button x:Name="RefreshBtn" Content="Refresh Catalog" Click="RefreshStock_Click" Margin="25,0,0,0"/>
             <Button x:Name="InspectBtn" Content="🔍 Inspect Raw JSON" Click="InspectRawStock_Click" Margin="10,0,0,0" Style="{StaticResource AccentButtonStyle}"/>
         </StackPanel>
 

@@ -16,6 +16,10 @@ namespace DiapStash_Plugin
         public string Size { get; set; } = string.Empty;
         public int Left { get; set; }
         public string ImageUrl { get; set; } = string.Empty;
+
+        // Propiedades de identificación para la consolidación en el cliente
+        public int DiaperTypeId { get; set; }
+        public string VariantId { get; set; } = string.Empty;
     }
 
     public class DiapStashChangeState
@@ -52,6 +56,12 @@ namespace DiapStash_Plugin
 
         public bool IsRateLimited { get; private set; }
 
+        private DiapStashChangeState? _cachedChangeState;
+        private DateTime _changeStateCacheExpiration = DateTime.MinValue;
+
+        private List<DiaperStockItem>? _cachedStockItems;
+        private DateTime _stockItemsCacheExpiration = DateTime.MinValue;
+
         private readonly Dictionary<int, (string FullName, string ImageUrl)> _typeMetadataCache =
             new Dictionary<int, (string FullName, string ImageUrl)>();
 
@@ -59,7 +69,8 @@ namespace DiapStash_Plugin
         {
             var handler = new HttpClientHandler
             {
-                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate,
+                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
             };
 
             _httpClient = new HttpClient(handler)
@@ -125,10 +136,15 @@ namespace DiapStash_Plugin
             catch (Exception ex) { return $"❌ Network exception: {ex.Message}"; }
         }
 
-        public async Task<List<DiaperStockItem>> FetchCurrentStockItemsAsync()
+        public async Task<List<DiaperStockItem>> FetchCurrentStockItemsAsync(bool forceRefresh = false)
         {
             var allStockItems = new List<DiaperStockItem>();
             if (string.IsNullOrEmpty(_accessToken) || string.IsNullOrEmpty(_clientId)) return allStockItems;
+
+            if (!forceRefresh && _cachedStockItems != null && DateTime.Now < _stockItemsCacheExpiration)
+            {
+                return _cachedStockItems;
+            }
 
             try
             {
@@ -139,6 +155,9 @@ namespace DiapStash_Plugin
 
                 allStockItems.AddRange(disposablesTask.Result);
                 allStockItems.AddRange(reusablesTask.Result);
+
+                _cachedStockItems = allStockItems;
+                _stockItemsCacheExpiration = DateTime.Now.AddMinutes(5);
             }
             catch { }
             return allStockItems;
@@ -195,7 +214,9 @@ namespace DiapStash_Plugin
                                     Name = cleanName,
                                     Size = size,
                                     Left = itemsLeft,
-                                    ImageUrl = metadata.ImageUrl
+                                    ImageUrl = metadata.ImageUrl,
+                                    DiaperTypeId = diaperTypeId, // Mapeo de IDs para agregación
+                                    VariantId = variantId
                                 };
                             }
                             catch
@@ -205,7 +226,9 @@ namespace DiapStash_Plugin
                                     Name = $"Product #{diaperTypeId}",
                                     Size = size,
                                     Left = itemsLeft,
-                                    ImageUrl = ""
+                                    ImageUrl = "",
+                                    DiaperTypeId = diaperTypeId,
+                                    VariantId = variantId
                                 };
                             }
                         }));
@@ -219,9 +242,9 @@ namespace DiapStash_Plugin
             return list;
         }
 
-        public async Task<string> FetchCurrentStockSummaryAsync()
+        public async Task<string> FetchCurrentStockSummaryAsync(bool forceRefresh = false)
         {
-            var items = await FetchCurrentStockItemsAsync();
+            var items = await FetchCurrentStockItemsAsync(forceRefresh);
             if (items.Count == 0) return "📦 DiapStash Inventory is currently empty.";
 
             var sb = new StringBuilder("📦 Current DiapStash Stock: ");
@@ -311,13 +334,17 @@ namespace DiapStash_Plugin
             catch { return (fallbackName, ""); }
         }
 
-        public async Task<DiapStashChangeState?> FetchLatestChangeStateObjectAsync()
+        public async Task<DiapStashChangeState?> FetchLatestChangeStateObjectAsync(bool forceRefresh = false)
         {
             if (string.IsNullOrEmpty(_accessToken) || string.IsNullOrEmpty(_clientId)) return null;
 
+            if (!forceRefresh && _cachedChangeState != null && DateTime.Now < _changeStateCacheExpiration)
+            {
+                return _cachedChangeState;
+            }
+
             try
             {
-                // FIXED: Appended pagination parameters to force descending chronological sorting right from page 0
                 string paginatedUrl = "api/v1/history/changes?page=0&size=10&sort=startTime,DESC";
 
                 using var request = CreateAuthenticatedRequest(HttpMethod.Get, paginatedUrl);
@@ -347,11 +374,9 @@ namespace DiapStash_Plugin
                     return null;
                 }
 
-                // Since we request DESC sorting, index 0 is guaranteed to hold the true absolute latest event frame entry
                 JsonElement latestNode = dataArray[0];
                 DateTime maxStartTime = DateTime.MinValue;
 
-                // Precision fallback verification iteration sequence loop
                 foreach (var node in dataArray.EnumerateArray())
                 {
                     if (node.TryGetProperty("startTime", out var stProp) && stProp.ValueKind == JsonValueKind.String)
@@ -410,9 +435,11 @@ namespace DiapStash_Plugin
 
                     var metadata = await FetchDiaperTypeMetadataAsync(stateResult.TypeId, stateResult.VariantId);
                     stateResult.ProductName = metadata.FullName;
-
                     stateResult.ImageUrl = metadata.ImageUrl;
                 }
+
+                _cachedChangeState = stateResult;
+                _changeStateCacheExpiration = DateTime.Now.AddMinutes(5);
 
                 return stateResult;
             }

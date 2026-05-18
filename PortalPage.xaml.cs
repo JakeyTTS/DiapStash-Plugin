@@ -56,7 +56,6 @@ namespace DiapStash_Plugin
                 _oauthListener.Start();
 
                 string redirectUri = Uri.EscapeDataString("http://localhost:8888/");
-                // Explicitly requesting offline_access to retrieve a persistent refresh_token
                 string scope = Uri.EscapeDataString("cloud-sync.stock cloud-sync.history cloud-sync.types offline_access");
                 string loginUrl = $"https://account.diapstash.com/oidc/auth?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope={scope}";
 
@@ -89,7 +88,6 @@ namespace DiapStash_Plugin
                     return;
                 }
 
-                // Parse the code out of the loopback redirect query parameters array cleanly
                 string code = context.Request.QueryString["code"] ?? "";
 
                 byte[] htmlFeedback = Encoding.UTF8.GetBytes("<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>✓ Link Successful!</h2><p>You can close this tab safely and return to the Application panel layout.</p></body></html>");
@@ -141,7 +139,6 @@ namespace DiapStash_Plugin
                 string base64Credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(rawCredentials));
                 request.Headers.Authorization = new AuthenticationHeaderValue("Basic", base64Credentials);
 
-                // FIXED: Log full outgoing envelope tracking parameters for context confirmation
                 var sbDebug = new StringBuilder();
                 sbDebug.AppendLine("============ 🛫 OUTGOING HTTP REQUEST DETAILS ============");
                 sbDebug.AppendLine($"URL: {request.RequestUri}");
@@ -155,7 +152,6 @@ namespace DiapStash_Plugin
                 using var response = await _tokenHttpClient.SendAsync(request);
                 string rawResponseText = await response.Content.ReadAsStringAsync();
 
-                // FIXED: Capture full response context when an anomaly or standard HTML structural envelope is intercepted
                 if (rawResponseText.Trim().StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) ||
                     rawResponseText.Trim().StartsWith("<html", StringComparison.OrdinalIgnoreCase) ||
                     !response.IsSuccessStatusCode)
@@ -179,7 +175,6 @@ namespace DiapStash_Plugin
                     sbErrorDump.AppendLine(rawResponseText);
                     sbErrorDump.AppendLine("========================================================");
 
-                    // Drop the massive text payload cleanly down into the logging framework
                     MainWindow.Instance?.Log(sbErrorDump.ToString());
                     return;
                 }
@@ -216,7 +211,6 @@ namespace DiapStash_Plugin
             }
         }
 
-        // FIXED: Added dedicated Access Token Refresh implementation matching documentation rules
         public async Task<bool> RefreshAccessTokenAsync()
         {
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;

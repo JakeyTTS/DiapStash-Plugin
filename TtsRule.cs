@@ -7,14 +7,12 @@ using Microsoft.UI.Xaml.Data;
 
 namespace DiapStash_Plugin
 {
-    // FIXED: Added a custom converter targeting parameter bounds mapping ranges to handle dynamic 3 vs 5 element scales rules
     public class TargetVariableToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             if (value is string currentVariable && parameter is string limitType)
             {
-                // Messy filters index ranges strictly capped to maximum value of 3 (hides level 4 and 5 controls)
                 if (limitType == "Wetness" && currentVariable == "Messy")
                 {
                     return Visibility.Collapsed;
@@ -38,6 +36,9 @@ namespace DiapStash_Plugin
         private string _targetValue = "YES";
         private string _outputMessage = "";
 
+        [System.Text.Json.Serialization.JsonIgnore]
+        public TtsComplexRuleCard? ParentCard { get; set; }
+
         public string LogicalOperator
         {
             get => _logicalOperator;
@@ -48,10 +49,7 @@ namespace DiapStash_Plugin
                     _logicalOperator = value;
                     OnPropertyChanged();
 
-                    if (_logicalOperator == "AND")
-                    {
-                        OutputMessage = string.Empty;
-                    }
+                    ParentCard?.NotifyAllClausesVisibilityChanged();
                 }
             }
         }
@@ -106,9 +104,35 @@ namespace DiapStash_Plugin
             set { _outputMessage = value; OnPropertyChanged(); }
         }
 
-        public bool IsNumericControl => TargetVariable == "Wetness" || TargetVariable == "Messy";
-        public bool IsTextControl => TargetVariable == "Leak" || TargetVariable == "Blowout";
-        public bool IsStatusControl => TargetVariable == "Status";
+        public bool IsConditionalClause => LogicalOperator != "ELSE";
+        public bool IsNumericControl => IsConditionalClause && (TargetVariable == "Wetness" || TargetVariable == "Messy");
+        public bool IsTextControl => IsConditionalClause && (TargetVariable == "Leak" || TargetVariable == "Blowout");
+        public bool IsStatusControl => IsConditionalClause && (TargetVariable == "Status");
+
+        public bool IsLastInLogicalBlock
+        {
+            get
+            {
+                if (ParentCard == null) return true;
+                int myIndex = ParentCard.Clauses.IndexOf(this);
+
+                if (myIndex == ParentCard.Clauses.Count - 1) return true;
+
+                string nextOp = ParentCard.Clauses[myIndex + 1].LogicalOperator;
+                if (nextOp == "IF" || nextOp == "ELSE IF" || nextOp == "ELSE") return true;
+
+                return false;
+            }
+        }
+
+        public void RefreshVisibilityProperties()
+        {
+            OnPropertyChanged(nameof(IsConditionalClause));
+            OnPropertyChanged(nameof(IsNumericControl));
+            OnPropertyChanged(nameof(IsTextControl));
+            OnPropertyChanged(nameof(IsStatusControl));
+            OnPropertyChanged(nameof(IsLastInLogicalBlock)); 
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
@@ -128,7 +152,28 @@ namespace DiapStash_Plugin
 
         public TtsComplexRuleCard()
         {
-            Clauses.Add(new TtsClause { LogicalOperator = "IF" });
+            var ifClause = new TtsClause { LogicalOperator = "IF", TargetVariable = "Leak", TargetValue = "YES", ParentCard = this };
+            var elseClause = new TtsClause { LogicalOperator = "ELSE", OutputMessage = "Default state fallback.", ParentCard = this };
+
+            Clauses.Add(ifClause);
+            Clauses.Add(elseClause);
+
+            Clauses.CollectionChanged += (s, e) =>
+            {
+                if (Clauses != null)
+                {
+                    foreach (var clause in Clauses) clause.ParentCard = this;
+                    NotifyAllClausesVisibilityChanged();
+                }
+            };
+        }
+
+        public void NotifyAllClausesVisibilityChanged()
+        {
+            foreach (var clause in Clauses)
+            {
+                clause.RefreshVisibilityProperties();
+            }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

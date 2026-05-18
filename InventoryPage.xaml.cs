@@ -2,24 +2,26 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace DiapStash_Plugin
 {
     public partial class InventoryPage : UserControl
     {
+        private List<DiaperStockItem> _masterStockItemsList = new List<DiaperStockItem>();
+
         public InventoryPage()
         {
             this.InitializeComponent();
         }
 
-        public async Task RefreshStockAsync()
+        public async Task RefreshStockAsync(bool forceRefresh = false)
         {
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
             string currentToken = settings.Values["SavedStashToken"]?.ToString() ?? "";
             string currentClientId = settings.Values["SavedClientId"]?.ToString() ?? "";
 
-            // Evaluate configuration credentials state parameters synchronously instantly
             if (string.IsNullOrEmpty(currentToken) || string.IsNullOrEmpty(currentClientId))
             {
                 InventoryInfoBar.Title = "Authentication Required";
@@ -34,14 +36,12 @@ namespace DiapStash_Plugin
 
             try
             {
-                // Fetch stock items from the background network worker stack safely
-                var stockItemsList = await DiapStashClient.Instance.FetchCurrentStockItemsAsync();
+                var stockItemsList = await DiapStashClient.Instance.FetchCurrentStockItemsAsync(forceRefresh);
 
                 if (this.DispatcherQueue == null) return;
 
                 this.DispatcherQueue.TryEnqueue(() =>
                 {
-                    // Catch thread execution anomalies if controls are missing
                     if (InventoryInfoBar == null || InventoryCardsGrid == null) return;
 
                     if (DiapStashClient.Instance.IsRateLimited)
@@ -64,21 +64,11 @@ namespace DiapStash_Plugin
                         return;
                     }
 
-                    // Clear error notifications upon clean data validation response checks
                     InventoryInfoBar.IsOpen = false;
 
-                    // Fallback injection to replace empty image paths with a standard local asset link path directly
-                    foreach (var item in stockItemsList)
-                    {
-                        if (string.IsNullOrWhiteSpace(item.ImageUrl) || !item.ImageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Injects local icon asset link directly if CDN thumbnail field returns empty string values
-                            item.ImageUrl = "ms-appx:///Assets/StoreLogo.png";
-                        }
-                    }
+                    _masterStockItemsList = stockItemsList;
 
-                    // Feed collection directly straight to the UI item grid source binding list context
-                    InventoryCardsGrid.ItemsSource = stockItemsList;
+                    ApplyCurrentInventoryFilters();
                 });
             }
             catch (Exception ex)
@@ -87,9 +77,47 @@ namespace DiapStash_Plugin
             }
         }
 
+        private void ApplyCurrentInventoryFilters()
+        {
+            if (_masterStockItemsList == null || InventoryCardsGrid == null) return;
+
+            bool filterInstockOnly = StockFilterToggle != null && StockFilterToggle.IsOn;
+
+            var query = _masterStockItemsList
+                .GroupBy(item => new { item.DiaperTypeId, VariantId = item.VariantId ?? "", Size = item.Size ?? "" })
+                .Select(group =>
+                {
+                    var primaryItem = group.First();
+
+                    return new DiaperStockItem
+                    {
+                        DiaperTypeId = group.Key.DiaperTypeId,
+                        VariantId = group.Key.VariantId,
+                        Size = group.Key.Size,
+                        Name = primaryItem.Name,
+                        Left = group.Sum(i => i.Left),
+                        ImageUrl = string.IsNullOrWhiteSpace(primaryItem.ImageUrl) || !primaryItem.ImageUrl.StartsWith("http")
+                            ? "ms-appx:///Assets/StoreLogo.png"
+                            : primaryItem.ImageUrl
+                    };
+                });
+
+            if (filterInstockOnly)
+            {
+                query = query.Where(item => item.Left > 0);
+            }
+
+            InventoryCardsGrid.ItemsSource = query.OrderBy(item => item.Name).ThenBy(item => item.Size).ToList();
+        }
+
+        private void StockFilterToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            ApplyCurrentInventoryFilters();
+        }
+
         private void RefreshStock_Click(object sender, RoutedEventArgs e)
         {
-            _ = RefreshStockAsync();
+            _ = RefreshStockAsync(forceRefresh: true);
         }
 
         private async void InspectRawStock_Click(object sender, RoutedEventArgs e)

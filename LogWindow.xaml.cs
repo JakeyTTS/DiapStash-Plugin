@@ -17,8 +17,6 @@ namespace DiapStash_Plugin
             {
                 appWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "appicon.ico"));
             }
-
-            // FIXED: Automatically pull and render historical logs cache upon initialization
             PopulateBacklog();
         }
 

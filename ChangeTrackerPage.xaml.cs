@@ -19,7 +19,7 @@ namespace DiapStash_Plugin
             RulesListView.ItemsSource = JakeyTtsClient.Instance.ComplexRuleCards;
         }
 
-        public async Task RefreshChangeAsync()
+        public async Task RefreshChangeAsync(bool forceRefresh = false)
         {
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
             string currentToken = settings.Values["SavedStashToken"]?.ToString() ?? "";
@@ -36,7 +36,7 @@ namespace DiapStash_Plugin
             }
 
             DiapStashClient.Instance.ConfigureAuthentication(currentToken, currentClientId);
-            var statePayload = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync();
+            var statePayload = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync(forceRefresh);
 
             if (DiapStashClient.Instance.IsRateLimited)
             {
@@ -86,8 +86,6 @@ namespace DiapStash_Plugin
                     CardStatusBadge.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 128, 128, 128));
                 }
             }
-
-            // FIXED: Point image layout assignment parsing cleanly straight to the new .ImageUrl separate field parameter
             if (!string.IsNullOrEmpty(statePayload.ImageUrl) && statePayload.ImageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             {
                 CardProductImage.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(statePayload.ImageUrl));
@@ -115,11 +113,11 @@ namespace DiapStash_Plugin
 
             if (JakeyTtsClient.Instance != null)
             {
-                _ = Task.Run(async () => await JakeyTtsClient.Instance.SynchronizeJakeyGlobalVariablesAsync());
+                _ = Task.Run(async () => await JakeyTtsClient.Instance.SynchronizeJakeyGlobalVariablesAsync(forceRefresh));
             }
         }
 
-        private void RefreshChange_Click(object sender, RoutedEventArgs e) => _ = RefreshChangeAsync();
+        private void RefreshChange_Click(object sender, RoutedEventArgs e) => _ = RefreshChangeAsync(forceRefresh: true);
 
         private void AddRule_Click(object sender, RoutedEventArgs e)
         {
@@ -138,8 +136,19 @@ namespace DiapStash_Plugin
         {
             if (sender is Button btn && btn.DataContext is TtsComplexRuleCard targetCard)
             {
-                string logicalOp = targetCard.Clauses.Count > 0 ? "AND" : "IF";
-                targetCard.Clauses.Add(new TtsClause { LogicalOperator = logicalOp });
+                int insertionIndex = Math.Max(0, targetCard.Clauses.Count - 1);
+
+                string logicalOp = "ELSE IF";
+                if (insertionIndex > 0)
+                {
+                    string previousOp = targetCard.Clauses[insertionIndex - 1].LogicalOperator;
+                    logicalOp = (previousOp == "IF" || previousOp == "AND") ? "AND" : "ELSE IF";
+                }
+
+                var newClause = new TtsClause { LogicalOperator = logicalOp, ParentCard = targetCard };
+                targetCard.Clauses.Insert(insertionIndex, newClause);
+
+                targetCard.NotifyAllClausesVisibilityChanged();
             }
         }
 
@@ -147,14 +156,50 @@ namespace DiapStash_Plugin
         {
             if (sender is Button btn && btn.DataContext is TtsClause clauseToRemove)
             {
-                foreach (var card in JakeyTtsClient.Instance.ComplexRuleCards)
+                var card = clauseToRemove.ParentCard;
+                if (card != null)
                 {
-                    if (card.Clauses.Contains(clauseToRemove))
-                    {
-                        card.Clauses.Remove(clauseToRemove);
-                        break;
-                    }
+                    card.Clauses.Remove(clauseToRemove);
+                    card.NotifyAllClausesVisibilityChanged();
                 }
+            }
+        }
+
+        private void MoveClauseUp_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is TtsClause clause)
+            {
+                var card = clause.ParentCard;
+                if (card == null) return;
+
+                int currentIndex = card.Clauses.IndexOf(clause);
+
+                if (currentIndex <= 0) return;
+
+                card.Clauses.RemoveAt(currentIndex);
+                card.Clauses.Insert(currentIndex - 1, clause);
+
+                card.NotifyAllClausesVisibilityChanged();
+            }
+        }
+
+        private void MoveClauseDown_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is TtsClause clause)
+            {
+                var card = clause.ParentCard;
+                if (card == null) return;
+
+                int currentIndex = card.Clauses.IndexOf(clause);
+
+                if (currentIndex >= card.Clauses.Count - 1 || clause.LogicalOperator == "ELSE") return;
+
+                if (currentIndex == card.Clauses.Count - 2) return;
+
+                card.Clauses.RemoveAt(currentIndex);
+                card.Clauses.Insert(currentIndex + 1, clause);
+
+                card.NotifyAllClausesVisibilityChanged();
             }
         }
 
@@ -162,7 +207,7 @@ namespace DiapStash_Plugin
         {
             JakeyTtsClient.Instance.SaveRulesToSettings();
             MainWindow.Instance?.Log("💾 Persisted multi-level conditional tree matrix hierarchy safely into Windows Container Storage.");
-            _ = JakeyTtsClient.Instance.SynchronizeJakeyGlobalVariablesAsync();
+            _ = JakeyTtsClient.Instance.SynchronizeJakeyGlobalVariablesAsync(forceRefresh: true);
         }
 
         private void SaveTtsTemplate_Click(object sender, RoutedEventArgs e)
@@ -174,7 +219,7 @@ namespace DiapStash_Plugin
             settings.Values["SavedTtsTemplate"] = customText;
 
             MainWindow.Instance?.Log("💾 Saved custom blueprint template framework text into persistent state properties.");
-            _ = JakeyTtsClient.Instance.SynchronizeJakeyGlobalVariablesAsync();
+            _ = JakeyTtsClient.Instance.SynchronizeJakeyGlobalVariablesAsync(forceRefresh: true);
         }
 
         private async void InspectRawChange_Click(object sender, RoutedEventArgs e)

@@ -23,7 +23,6 @@ namespace DiapStash_Plugin
 
             ExtendsContentIntoTitleBar = false;
 
-            // Registro explícito del evento en el código subyacente
             NavView.ItemInvoked += NavView_ItemInvokedHandler;
 
             IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -51,7 +50,6 @@ namespace DiapStash_Plugin
             MainContentFrame.Content = _homePage;
         }
 
-        // 💡 SOLUCIÓN AL ERROR: Método público expuesto para que HomePage pueda acceder a la instancia de PortalPage y refrescar tokens
         public UserControl GetPortalPageInstance()
         {
             return _portalPage;
@@ -119,11 +117,9 @@ namespace DiapStash_Plugin
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
-            // Desuscripción segura de eventos en el desmontaje
             NavView.ItemInvoked -= NavView_ItemInvokedHandler;
             JakeyTtsClient.Instance.LogReceived -= OnLogReceived;
 
-            // Ejecución sin bloqueo para evitar advertencias de async/void en eventos de ciclo de vida de WinUI 3
             _ = Task.Run(async () =>
             {
                 try
