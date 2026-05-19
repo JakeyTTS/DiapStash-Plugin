@@ -4,6 +4,8 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -101,6 +103,13 @@ namespace DiapStash_Plugin
                 _ = Task.Run(async () => await SynchronizeJakeyGlobalVariablesAsync(forceRefresh: true));
                 _ = Task.Run(ReceiveLoopAsync);
             }
+            // FIXED: Interceptamos de forma quirúrgica la denegación de sockets para evitar que rompa el árbol visual
+            catch (WebSocketException wsex) when (wsex.InnerException is SocketException sex && sex.SocketErrorCode == SocketError.ConnectionRefused)
+            {
+                LogReceived?.Invoke("⚠️ Standalone mode active: Local engine at port 8889 is offline. Auto-reconnect active.");
+                CleanupSocket();
+                HandleAutomaticRecovery(bridgeUrl);
+            }
             catch (OperationCanceledException)
             {
                 LogReceived?.Invoke("⚠️ Connection attempt timed out. JakeyTTS server might not be running.");
@@ -109,7 +118,7 @@ namespace DiapStash_Plugin
             }
             catch (Exception ex)
             {
-                LogReceived?.Invoke($"❌ Connection failed: {ex.Message}. Operating in offline standalone fallback mode.");
+                LogReceived?.Invoke($"❌ Connection anomaly: {ex.Message}. Operating in offline standalone fallback mode.");
                 CleanupSocket();
                 HandleAutomaticRecovery(bridgeUrl);
             }
@@ -455,6 +464,11 @@ namespace DiapStash_Plugin
                         }
                     }
                 }
+            }
+            // FIXED: Protegemos el bucle de lectura contra desconexiones abruptas del socket o tubería rota en streaming
+            catch (WebSocketException wsex)
+            {
+                LogReceived?.Invoke($"🔌 WebSocket channel dropped: {wsex.Message}");
             }
             catch (Exception ex)
             {

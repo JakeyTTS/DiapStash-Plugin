@@ -16,6 +16,7 @@
                 <NavigationViewItem Content="Home" Tag="Home" Icon="Home"/>
                 <NavigationViewItem Content="Inventory" Tag="Inventory" Icon="AllApps"/>
                 <NavigationViewItem Content="Change Log Stream" Tag="ChangeTracker" Icon="PostUpdate"/>
+                <NavigationViewItem Icon="Video" Content="Streaming Overlay" Tag="Streaming" />
                 <NavigationViewItem Content="DiapStash Portal" Tag="StashAuth" Icon="Contact"/>
                 <NavigationViewItem Content="JakeyTTS Injections" Tag="Injections" Icon="Share"/>
             </NavigationView.MenuItems>

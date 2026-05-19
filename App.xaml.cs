@@ -66,11 +66,12 @@ namespace DiapStash_Plugin
         /// <param name="args">Details about the launch request and process.</param>
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            // Load local rule configurations variables from settings registries or files
             JakeyTtsClient.Instance.LoadRulesFromSettings();
 
-            // Instantiate and display the application main window natively
+            OverlayServer.Instance.Start();
+
             _window = new MainWindow();
+            _window.Activate();
         }
-    }
+        }
 }

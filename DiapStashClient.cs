@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -73,7 +74,8 @@ namespace DiapStash_Plugin
 
             _httpClient = new HttpClient(handler)
             {
-                BaseAddress = new Uri("https://api.diapstash.com/")
+                BaseAddress = new Uri("https://api.diapstash.com/"),
+                Timeout = TimeSpan.FromSeconds(8) // Línea de vida preventiva para evitar cuelgues de UI
             };
         }
 
@@ -130,6 +132,10 @@ namespace DiapStash_Plugin
 
                 using var jsonDoc = JsonDocument.Parse(rawJson);
                 return JsonSerializer.Serialize(jsonDoc, new JsonSerializerOptions { WriteIndented = true });
+            }
+            catch (HttpRequestException ex) when (ex.InnerException is SocketException sex && sex.SocketErrorCode == SocketError.ConnectionRefused)
+            {
+                return "❌ Connection refused by the local integration endpoint.";
             }
             catch (Exception ex) { return $"❌ Network exception: {ex.Message}"; }
         }
@@ -235,6 +241,11 @@ namespace DiapStash_Plugin
                     var results = await Task.WhenAll(processingTasks);
                     list.AddRange(results);
                 }
+            }
+            // FIXED: Interceptamos errores de rechazo del pool HTTP para evitar crashes de UI
+            catch (HttpRequestException ex) when (ex.InnerException is SocketException sex && sex.SocketErrorCode == SocketError.ConnectionRefused)
+            {
+                System.Diagnostics.Debug.WriteLine("⚠️ [DiapStashClient] Connection refused on stock collection pipeline.");
             }
             catch { }
             return list;
@@ -441,10 +452,15 @@ namespace DiapStash_Plugin
 
                 return stateResult;
             }
+            // FIXED: Interceptamos de forma segura la caída del pool HTTP en la obtención del estado activo
+            catch (HttpRequestException ex) when (ex.InnerException is SocketException sex && sex.SocketErrorCode == SocketError.ConnectionRefused)
+            {
+                System.Diagnostics.Debug.WriteLine("⚠️ [DiapStashClient] Connection refused by endpoint core pipeline on change state evaluation.");
+                return new DiapStashChangeState { ProductName = "Core Offline", Note = "Awaiting connection..." };
+            }
             catch { return null; }
         }
 
-        // FIXED: Added Window-Independent Token Refresh loop architecture execution context method for Headless boots
         public async Task<bool> RefreshAccessTokenHeadlessAsync()
         {
             var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
@@ -515,6 +531,11 @@ namespace DiapStash_Plugin
                     File.WriteAllText(credentialsPath, JsonSerializer.Serialize(credentialBackup));
                     return true;
                 }
+            }
+            // FIXED: Control preventivo para el pool de actualización headless en arranques offline
+            catch (HttpRequestException ex) when (ex.InnerException is SocketException sex && sex.SocketErrorCode == SocketError.ConnectionRefused)
+            {
+                System.Diagnostics.Debug.WriteLine("⚠️ [DiapStashClient] Headless refresh bypassed due to connection refusal.");
             }
             catch { }
             return false;

@@ -16,6 +16,7 @@ namespace DiapStash_Plugin
         private readonly InventoryPage _inventoryPage = new InventoryPage();
         private readonly ChangeTrackerPage _changeTrackerPage = new ChangeTrackerPage();
         private readonly UserControl _injectionsPage = new InjectionsPage();
+        private readonly UserControl _streamingPage = new StreamingPage();
 
         public MainWindow()
         {
@@ -80,6 +81,7 @@ namespace DiapStash_Plugin
                 case "Inventory": MainContentFrame.Content = _inventoryPage; _ = _inventoryPage.RefreshStockAsync(); break;
                 case "ChangeTracker": MainContentFrame.Content = _changeTrackerPage; _ = _changeTrackerPage.RefreshChangeAsync(); break;
                 case "Injections": MainContentFrame.Content = _injectionsPage; break;
+                case "Streaming": MainContentFrame.Content = _streamingPage; break;
             }
         }
 
