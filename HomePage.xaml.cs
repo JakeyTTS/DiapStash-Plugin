@@ -1,8 +1,10 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace DiapStash_Plugin
 {
@@ -11,7 +13,6 @@ namespace DiapStash_Plugin
         private LogWindow? _floatingLogWindow;
         private string _cachedTtsUrl = "ws://localhost:8889/";
 
-        // Static historical log cache container to store backend worker context logs securely across window lifecycles
         public static readonly List<string> LogCacheBacklog = new List<string>();
 
         public HomePage()
@@ -22,11 +23,28 @@ namespace DiapStash_Plugin
 
         private async Task CheckPlatformStateAsync()
         {
-            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            string clientId = settings.Values["SavedClientId"]?.ToString() ?? "";
-            string clientSecret = settings.Values["SavedClientSecret"]?.ToString() ?? "";
-            string token = settings.Values["SavedStashToken"]?.ToString() ?? "";
-            _cachedTtsUrl = settings.Values["SavedTtsUrl"]?.ToString() ?? "ws://localhost:8889/";
+            // FIXED: Stripped all ApplicationData container settings.
+            // Pulled configuration tokens strictly out of our local disk credentials file map structure.
+            string clientId = "";
+            string clientSecret = "";
+            string token = "";
+            _cachedTtsUrl = "ws://localhost:8889/";
+
+            try
+            {
+                string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
+                if (File.Exists(credentialsPath))
+                {
+                    string rawCreds = File.ReadAllText(credentialsPath);
+                    using var doc = JsonDocument.Parse(rawCreds);
+                    var root = doc.RootElement;
+                    clientId = root.TryGetProperty("ClientId", out var idProp) ? idProp.GetString() ?? "" : "";
+                    clientSecret = root.TryGetProperty("ClientSecret", out var secProp) ? secProp.GetString() ?? "" : "";
+                    token = root.TryGetProperty("AccessToken", out var tokenProp) ? tokenProp.GetString() ?? "" : "";
+                    _cachedTtsUrl = root.TryGetProperty("TtsUrl", out var urlProp) ? urlProp.GetString() ?? _cachedTtsUrl : _cachedTtsUrl;
+                }
+            }
+            catch { }
 
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
             {
@@ -42,9 +60,16 @@ namespace DiapStash_Plugin
                 return;
             }
 
-            AppendLog("📡 Verifying token lifetime persistence against secure API infrastructure...");
             DiapStashClient.Instance.ConfigureAuthentication(token, clientId);
 
+            if (JakeyTtsClient.Instance.IsConnected)
+            {
+                UpdateStatusUi($"DiapStash Ready. Connected Client: {clientId}", showConfigure: false, showLogin: false, showTts: true, hideLoading: true);
+                AppendLog("✨ Connected to engine passively via background thread orchestration channels.");
+                return;
+            }
+
+            AppendLog("📡 Verifying token lifetime persistence against secure API infrastructure...");
             var payloadCheck = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync();
 
             if (DiapStashClient.Instance.IsRateLimited)

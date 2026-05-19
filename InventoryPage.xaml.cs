@@ -2,7 +2,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace DiapStash_Plugin
@@ -18,9 +20,24 @@ namespace DiapStash_Plugin
 
         public async Task RefreshStockAsync(bool forceRefresh = false)
         {
-            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            string currentToken = settings.Values["SavedStashToken"]?.ToString() ?? "";
-            string currentClientId = settings.Values["SavedClientId"]?.ToString() ?? "";
+            string currentToken = string.Empty;
+            string currentClientId = string.Empty;
+
+            // FIXED: Replaced call to Windows.Storage.ApplicationData container with a raw disk file reader 
+            // to ensure unpackaged WinUI 3 environments don't throw critical runtime exceptions.
+            try
+            {
+                string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
+                if (File.Exists(credentialsPath))
+                {
+                    string rawCreds = File.ReadAllText(credentialsPath);
+                    using var doc = JsonDocument.Parse(rawCreds);
+                    var root = doc.RootElement;
+                    currentClientId = root.TryGetProperty("ClientId", out var idProp) ? idProp.GetString() ?? "" : "";
+                    currentToken = root.TryGetProperty("AccessToken", out var tokenProp) ? tokenProp.GetString() ?? "" : "";
+                }
+            }
+            catch { }
 
             if (string.IsNullOrEmpty(currentToken) || string.IsNullOrEmpty(currentClientId))
             {

@@ -16,8 +16,6 @@ namespace DiapStash_Plugin
         public string Size { get; set; } = string.Empty;
         public int Left { get; set; }
         public string ImageUrl { get; set; } = string.Empty;
-
-        // Propiedades de identificación para la consolidación en el cliente
         public int DiaperTypeId { get; set; }
         public string VariantId { get; set; } = string.Empty;
     }
@@ -215,7 +213,7 @@ namespace DiapStash_Plugin
                                     Size = size,
                                     Left = itemsLeft,
                                     ImageUrl = metadata.ImageUrl,
-                                    DiaperTypeId = diaperTypeId, // Mapeo de IDs para agregación
+                                    DiaperTypeId = diaperTypeId,
                                     VariantId = variantId
                                 };
                             }
@@ -444,6 +442,82 @@ namespace DiapStash_Plugin
                 return stateResult;
             }
             catch { return null; }
+        }
+
+        // FIXED: Added Window-Independent Token Refresh loop architecture execution context method for Headless boots
+        public async Task<bool> RefreshAccessTokenHeadlessAsync()
+        {
+            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
+            string clientId = settings.Values["SavedClientId"]?.ToString() ?? "";
+            string clientSecret = settings.Values["SavedClientSecret"]?.ToString() ?? "";
+            string refreshToken = settings.Values["SavedRefreshToken"]?.ToString() ?? "";
+
+            string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
+            if (string.IsNullOrEmpty(refreshToken) && File.Exists(credentialsPath))
+            {
+                try
+                {
+                    string rawCreds = File.ReadAllText(credentialsPath);
+                    using var doc = JsonDocument.Parse(rawCreds);
+                    var root = doc.RootElement;
+                    clientId = root.GetProperty("ClientId").GetString() ?? clientId;
+                    refreshToken = root.TryGetProperty("RefreshToken", out var rProp) ? rProp.GetString() ?? "" : "";
+                    clientSecret = root.TryGetProperty("ClientSecret", out var sProp) ? sProp.GetString() ?? "" : "";
+                }
+                catch { }
+            }
+
+            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret) || string.IsNullOrEmpty(refreshToken))
+                return false;
+
+            try
+            {
+                var bodyParams = new Dictionary<string, string>
+                {
+                    { "grant_type", "refresh_token" },
+                    { "refresh_token", refreshToken }
+                };
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, "https://account.diapstash.com/oidc/token");
+                request.Content = new FormUrlEncodedContent(bodyParams);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                string rawCredentials = $"{clientId}:{clientSecret}";
+                string base64Credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(rawCredentials));
+                request.Headers.Authorization = new AuthenticationHeaderValue("Basic", base64Credentials);
+
+                using var response = await _httpClient.SendAsync(request);
+                if (response.IsSuccessStatusCode)
+                {
+                    string rawJson = await response.Content.ReadAsStringAsync();
+                    using var doc = JsonDocument.Parse(rawJson);
+
+                    string newAccessToken = doc.RootElement.GetProperty("access_token").GetString() ?? "";
+                    string newRefreshToken = doc.RootElement.TryGetProperty("refresh_token", out var rfProp) ? rfProp.GetString() ?? "" : "";
+
+                    settings.Values["SavedStashToken"] = newAccessToken;
+                    if (!string.IsNullOrEmpty(newRefreshToken))
+                    {
+                        settings.Values["SavedRefreshToken"] = newRefreshToken;
+                        refreshToken = newRefreshToken;
+                    }
+
+                    ConfigureAuthentication(newAccessToken, clientId);
+
+                    var credentialBackup = new
+                    {
+                        ClientId = clientId,
+                        ClientSecret = clientSecret,
+                        AccessToken = newAccessToken,
+                        RefreshToken = refreshToken,
+                        TtsUrl = "ws://localhost:8889/"
+                    };
+                    File.WriteAllText(credentialsPath, JsonSerializer.Serialize(credentialBackup));
+                    return true;
+                }
+            }
+            catch { }
+            return false;
         }
     }
 }

@@ -1,5 +1,9 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
 using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 
 namespace DiapStash_Plugin
@@ -12,18 +16,15 @@ namespace DiapStash_Plugin
         private Window? _window;
 
         /// <summary>
-        /// Initializes the singleton application object.  This is the first line of authored code
+        /// Initializes the singleton application object. This is the first line of authored code
         /// executed, and as such is the logical equivalent of main() or WinMain().
         /// </summary>
         public App()
         {
             this.InitializeComponent();
-
-            // Sincronizamos el evento usando el delegado estricto de WinUI 3
             this.UnhandledException += App_UnhandledException;
         }
 
-        // FIXED: Forzamos el uso explícito de Microsoft.UI.Xaml.UnhandledExceptionEventArgs para romper la ambigüedad
         private void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         {
             e.Handled = true;
@@ -39,17 +40,12 @@ namespace DiapStash_Plugin
             errorReport.AppendLine("==========================================================================");
 
             string fullErrorText = errorReport.ToString();
-
-            // 1. Volcar el error en la consola de salida de Visual Studio de inmediato
             System.Diagnostics.Debug.WriteLine(fullErrorText);
 
-            // 2. FIXED: Usamos el DataPackage y Clipboard correctos del espacio de nombres de WinRT del sistema
             try
             {
                 var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
                 dataPackage.SetText(fullErrorText);
-
-                // Portapapeles nativo del sistema operativo compatible con el contexto de WinUI 3
                 Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
                 System.Diagnostics.Debug.WriteLine("📋 Full stack trace automatically copied to clipboard!");
             }
@@ -58,7 +54,6 @@ namespace DiapStash_Plugin
                 System.Diagnostics.Debug.WriteLine($"⚠️ Clipboard copy skipped due to cross-thread boundaries: {clipEx.Message}");
             }
 
-            // 3. Pausa del hilo si el depurador está activo
             if (System.Diagnostics.Debugger.IsAttached)
             {
                 System.Diagnostics.Debugger.Break();
@@ -71,8 +66,11 @@ namespace DiapStash_Plugin
         /// <param name="args">Details about the launch request and process.</param>
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
+            // Load local rule configurations variables from settings registries or files
+            JakeyTtsClient.Instance.LoadRulesFromSettings();
+
+            // Instantiate and display the application main window natively
             _window = new MainWindow();
-            _window.Activate();
         }
     }
 }

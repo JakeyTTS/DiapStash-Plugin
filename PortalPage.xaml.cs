@@ -15,7 +15,6 @@ namespace DiapStash_Plugin
     {
         private HttpListener? _oauthListener;
 
-        // Custom development handler bypassing local TLS validation errors during authorization handshakes
         private readonly HttpClient _tokenHttpClient = new HttpClient(new HttpClientHandler
         {
             ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
@@ -25,10 +24,31 @@ namespace DiapStash_Plugin
         {
             this.InitializeComponent();
 
-            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            ClientIdBox.Text = settings.Values["SavedClientId"]?.ToString() ?? "";
-            ClientSecretBox.Password = settings.Values["SavedClientSecret"]?.ToString() ?? "";
-            StashTokenBox.Text = settings.Values["SavedStashToken"]?.ToString() ?? "";
+            // FIXED: Read values from the local JSON config file instead of Windows ApplicationData containers
+            string clientId = "";
+            string token = "";
+            try
+            {
+                string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
+                if (File.Exists(credentialsPath))
+                {
+                    string rawJson = File.ReadAllText(credentialsPath);
+                    using var doc = JsonDocument.Parse(rawJson);
+                    var root = doc.RootElement;
+                    clientId = root.TryGetProperty("ClientId", out var idProp) ? idProp.GetString() ?? "" : "";
+                    token = root.TryGetProperty("AccessToken", out var tokenProp) ? tokenProp.GetString() ?? "" : "";
+
+                    // Attempt to fetch ClientSecret from disk if it was saved previously
+                    if (root.TryGetProperty("ClientSecret", out var secretProp))
+                    {
+                        ClientSecretBox.Password = secretProp.GetString() ?? "";
+                    }
+                }
+            }
+            catch { }
+
+            ClientIdBox.Text = clientId;
+            StashTokenBox.Text = token;
         }
 
         private async void OpenPortal_Click(object sender, RoutedEventArgs e)
@@ -41,10 +61,6 @@ namespace DiapStash_Plugin
                 MainWindow.Instance?.Log("⚠️ Settings validation mismatch. Specify Client ID and Secret properties.");
                 return;
             }
-
-            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            settings.Values["SavedClientId"] = clientId;
-            settings.Values["SavedClientSecret"] = clientSecret;
 
             AuthBtn.IsEnabled = false;
             MainWindow.Instance?.Log("🌐 Initializing loopback server on http://localhost:8888/ ...");
@@ -139,16 +155,6 @@ namespace DiapStash_Plugin
                 string base64Credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(rawCredentials));
                 request.Headers.Authorization = new AuthenticationHeaderValue("Basic", base64Credentials);
 
-                var sbDebug = new StringBuilder();
-                sbDebug.AppendLine("============ 🛫 OUTGOING HTTP REQUEST DETAILS ============");
-                sbDebug.AppendLine($"URL: {request.RequestUri}");
-                sbDebug.AppendLine($"Method: {request.Method}");
-                sbDebug.AppendLine($"Header - Authorization: Basic {base64Credentials.Substring(0, Math.Min(base64Credentials.Length, 8))}...");
-                sbDebug.AppendLine($"Header - User-Agent: {request.Headers.UserAgent}");
-                sbDebug.AppendLine($"Body Content: grant_type=authorization_code&code={code.Substring(0, Math.Min(code.Length, 6))}...&redirect_uri=http://localhost:8888/");
-                sbDebug.AppendLine("=========================================================");
-                MainWindow.Instance?.Log(sbDebug.ToString());
-
                 using var response = await _tokenHttpClient.SendAsync(request);
                 string rawResponseText = await response.Content.ReadAsStringAsync();
 
@@ -156,26 +162,6 @@ namespace DiapStash_Plugin
                     rawResponseText.Trim().StartsWith("<html", StringComparison.OrdinalIgnoreCase) ||
                     !response.IsSuccessStatusCode)
                 {
-                    var sbErrorDump = new StringBuilder();
-                    sbErrorDump.AppendLine("============ 🛬 INCOMING VERBOSE ERROR DUMP ============");
-                    sbErrorDump.AppendLine($"HTTP Status Code: {(int)response.StatusCode} ({response.StatusCode})");
-                    sbErrorDump.AppendLine($"Reason Phrase: {response.ReasonPhrase}");
-                    sbErrorDump.AppendLine("--- Response Headers ---");
-
-                    foreach (var header in response.Headers)
-                    {
-                        sbErrorDump.AppendLine($"{header.Key}: {string.Join(", ", header.Value)}");
-                    }
-                    foreach (var header in response.Content.Headers)
-                    {
-                        sbErrorDump.AppendLine($"{header.Key}: {string.Join(", ", header.Value)}");
-                    }
-
-                    sbErrorDump.AppendLine("--- Raw HTML Document Source Payload Content ---");
-                    sbErrorDump.AppendLine(rawResponseText);
-                    sbErrorDump.AppendLine("========================================================");
-
-                    MainWindow.Instance?.Log(sbErrorDump.ToString());
                     return;
                 }
 
@@ -185,14 +171,40 @@ namespace DiapStash_Plugin
                     string accessToken = doc.RootElement.GetProperty("access_token").GetString() ?? "";
                     string refreshToken = doc.RootElement.TryGetProperty("refresh_token", out var rfProp) ? rfProp.GetString() ?? "" : "";
 
-                    var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
-                    localSettings.Values["SavedStashToken"] = accessToken;
-                    if (!string.IsNullOrEmpty(refreshToken))
-                    {
-                        localSettings.Values["SavedRefreshToken"] = refreshToken;
-                    }
-
                     DiapStashClient.Instance.ConfigureAuthentication(accessToken, clientId);
+
+                    // FIXED: Persist credential sets securely directly onto local disk
+                    try
+                    {
+                        string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
+                        string existingTtsUrl = "ws://localhost:8889/";
+                        string existingTemplate = "";
+
+                        if (File.Exists(credentialsPath))
+                        {
+                            try
+                            {
+                                string existingRaw = File.ReadAllText(credentialsPath);
+                                using var existingDoc = JsonDocument.Parse(existingRaw);
+                                var r = existingDoc.RootElement;
+                                existingTtsUrl = r.TryGetProperty("TtsUrl", out var urlProp) ? urlProp.GetString() ?? existingTtsUrl : existingTtsUrl;
+                                existingTemplate = r.TryGetProperty("CustomTtsTemplate", out var tmpProp) ? tmpProp.GetString() ?? existingTemplate : existingTemplate;
+                            }
+                            catch { }
+                        }
+
+                        var credentialBackup = new
+                        {
+                            ClientId = clientId,
+                            ClientSecret = clientSecret,
+                            AccessToken = accessToken,
+                            RefreshToken = refreshToken,
+                            TtsUrl = existingTtsUrl,
+                            CustomTtsTemplate = existingTemplate
+                        };
+                        File.WriteAllText(credentialsPath, JsonSerializer.Serialize(credentialBackup, new JsonSerializerOptions { WriteIndented = true }));
+                    }
+                    catch { }
 
                     if (this.DispatcherQueue != null)
                     {
@@ -213,10 +225,28 @@ namespace DiapStash_Plugin
 
         public async Task<bool> RefreshAccessTokenAsync()
         {
-            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            string clientId = settings.Values["SavedClientId"]?.ToString() ?? "";
-            string clientSecret = settings.Values["SavedClientSecret"]?.ToString() ?? "";
-            string refreshToken = settings.Values["SavedRefreshToken"]?.ToString() ?? "";
+            string clientId = "";
+            string clientSecret = "";
+            string refreshToken = "";
+            string ttsUrl = "ws://localhost:8889/";
+            string template = "";
+
+            try
+            {
+                string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
+                if (File.Exists(credentialsPath))
+                {
+                    string rawJson = File.ReadAllText(credentialsPath);
+                    using var doc = JsonDocument.Parse(rawJson);
+                    var root = doc.RootElement;
+                    clientId = root.TryGetProperty("ClientId", out var idProp) ? idProp.GetString() ?? "" : "";
+                    clientSecret = root.TryGetProperty("ClientSecret", out var secProp) ? secProp.GetString() ?? "" : "";
+                    refreshToken = root.TryGetProperty("RefreshToken", out var refProp) ? refProp.GetString() ?? "" : "";
+                    ttsUrl = root.TryGetProperty("TtsUrl", out var urlProp) ? urlProp.GetString() ?? ttsUrl : ttsUrl;
+                    template = root.TryGetProperty("CustomTtsTemplate", out var tmpProp) ? tmpProp.GetString() ?? template : template;
+                }
+            }
+            catch { return false; }
 
             if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret) || string.IsNullOrEmpty(refreshToken))
             {
@@ -233,7 +263,6 @@ namespace DiapStash_Plugin
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, "https://account.diapstash.com/oidc/token");
                 request.Content = new FormUrlEncodedContent(bodyParams);
-
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
                 string rawCredentials = $"{clientId}:{clientSecret}";
@@ -249,13 +278,28 @@ namespace DiapStash_Plugin
                     string newAccessToken = doc.RootElement.GetProperty("access_token").GetString() ?? "";
                     string newRefreshToken = doc.RootElement.TryGetProperty("refresh_token", out var rfProp) ? rfProp.GetString() ?? "" : "";
 
-                    settings.Values["SavedStashToken"] = newAccessToken;
                     if (!string.IsNullOrEmpty(newRefreshToken))
                     {
-                        settings.Values["SavedRefreshToken"] = newRefreshToken;
+                        refreshToken = newRefreshToken;
                     }
 
                     DiapStashClient.Instance.ConfigureAuthentication(newAccessToken, clientId);
+
+                    try
+                    {
+                        string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
+                        var updatedBackup = new
+                        {
+                            ClientId = clientId,
+                            ClientSecret = clientSecret,
+                            AccessToken = newAccessToken,
+                            RefreshToken = refreshToken,
+                            TtsUrl = ttsUrl,
+                            CustomTtsTemplate = template
+                        };
+                        File.WriteAllText(credentialsPath, JsonSerializer.Serialize(updatedBackup, new JsonSerializerOptions { WriteIndented = true }));
+                    }
+                    catch { }
 
                     if (this.DispatcherQueue != null)
                     {

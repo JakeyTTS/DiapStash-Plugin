@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -22,7 +23,6 @@ namespace DiapStash_Plugin
             this.InitializeComponent();
 
             ExtendsContentIntoTitleBar = false;
-
             NavView.ItemInvoked += NavView_ItemInvokedHandler;
 
             IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -32,14 +32,9 @@ namespace DiapStash_Plugin
             if (appWindow != null)
             {
                 string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "appicon.ico");
-
                 if (File.Exists(iconPath))
                 {
                     appWindow.SetIcon(iconPath);
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"⚠️ Icon not found at target physical path: {iconPath}");
                 }
             }
 
@@ -48,26 +43,22 @@ namespace DiapStash_Plugin
 
             NavView.SelectedItem = NavView.MenuItems[0];
             MainContentFrame.Content = _homePage;
+
+            // Always activate the window normally to ensure it displays standard layouts natively
+            this.Activate();
         }
 
-        public UserControl GetPortalPageInstance()
-        {
-            return _portalPage;
-        }
+        public UserControl GetPortalPageInstance() => _portalPage;
 
         private void NavView_ItemInvokedHandler(NavigationView sender, NavigationViewItemInvokedEventArgs args)
         {
             var item = args.InvokedItemContainer as NavigationViewItem;
-            if (item?.Tag == null) return;
-
-            HandleNavigation(item.Tag.ToString());
+            if (item?.Tag != null) HandleNavigation(item.Tag.ToString());
         }
 
         public void NavigateToPage(string pageTag)
         {
-            if (this.DispatcherQueue == null) return;
-
-            this.DispatcherQueue.TryEnqueue(() =>
+            this.DispatcherQueue?.TryEnqueue(() =>
             {
                 foreach (var menuItem in NavView.MenuItems)
                 {
@@ -85,50 +76,22 @@ namespace DiapStash_Plugin
         {
             switch (pageTag)
             {
-                case "Home":
-                    MainContentFrame.Content = _homePage;
-                    break;
-                case "StashAuth":
-                    MainContentFrame.Content = _portalPage;
-                    break;
-                case "Inventory":
-                    MainContentFrame.Content = _inventoryPage;
-                    _ = _inventoryPage.RefreshStockAsync();
-                    break;
-                case "ChangeTracker":
-                    MainContentFrame.Content = _changeTrackerPage;
-                    _ = _changeTrackerPage.RefreshChangeAsync();
-                    break;
-                case "Injections":
-                    MainContentFrame.Content = _injectionsPage;
-                    break;
+                case "Home": MainContentFrame.Content = _homePage; break;
+                case "StashAuth": MainContentFrame.Content = _portalPage; break;
+                case "Inventory": MainContentFrame.Content = _inventoryPage; _ = _inventoryPage.RefreshStockAsync(); break;
+                case "ChangeTracker": MainContentFrame.Content = _changeTrackerPage; _ = _changeTrackerPage.RefreshChangeAsync(); break;
+                case "Injections": MainContentFrame.Content = _injectionsPage; break;
             }
         }
 
-        public void Log(string message)
-        {
-            if (_homePage is HomePage home)
-            {
-                home.AppendLog(message);
-            }
-        }
-
+        public void Log(string message) { if (_homePage is HomePage home) home.AppendLog(message); }
         private void OnLogReceived(string message) => Log(message);
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
             NavView.ItemInvoked -= NavView_ItemInvokedHandler;
             JakeyTtsClient.Instance.LogReceived -= OnLogReceived;
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await JakeyTtsClient.Instance.StopAsync();
-                }
-                catch { }
-            });
-
+            Task.Run(async () => { try { await JakeyTtsClient.Instance.StopAsync(); } catch { } });
             (_portalPage as PortalPage)?.ShutdownServer();
         }
     }

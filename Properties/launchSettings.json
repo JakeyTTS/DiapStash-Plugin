@@ -1,10 +1,8 @@
 {
-  "profiles": {
-    "DiapStash Plugin (Package)": {
-      "commandName": "MsixPackage"
-    },
-    "DiapStash Plugin (Unpackaged)": {
-      "commandName": "Project"
+    "profiles": {
+        "DiapStash_Plugin": {
+            "commandName": "Project",
+            "commandLineArgs": "-background"
+        }
     }
-  }
 }

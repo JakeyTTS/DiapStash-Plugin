@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.WebSockets;
@@ -18,83 +19,181 @@ namespace DiapStash_Plugin
 
         private ClientWebSocket? _webSocket;
         private CancellationTokenSource? _cts;
+        private readonly SemaphoreSlim _connectionLock = new SemaphoreSlim(1, 1);
+        private bool _isReconnecting = false;
 
         public event Action<string>? LogReceived;
 
         public ObservableCollection<TtsComplexRuleCard> ComplexRuleCards { get; } = new ObservableCollection<TtsComplexRuleCard>();
 
+        public bool IsConnected => _webSocket != null && _webSocket.State == WebSocketState.Open;
+
         private JakeyTtsClient() { }
 
         public void LoadRulesFromSettings()
         {
-            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            if (settings.Values.TryGetValue("SavedComplexRulesMatrixJSON", out var jsonRaw))
+            // FIXED: Stripped out ApplicationData container lookup loops entirely to ensure compatibility with unpackaged runtimes.
+            // All configurations now load cleanly from native local files.
+            try
             {
-                try
+                string fallbackPath = Path.Combine(AppContext.BaseDirectory, "rules_matrix.json");
+                if (File.Exists(fallbackPath))
                 {
-                    var list = JsonSerializer.Deserialize<List<TtsComplexRuleCard>>(jsonRaw.ToString());
-                    ComplexRuleCards.Clear();
-                    if (list != null)
+                    string fileRaw = File.ReadAllText(fallbackPath);
+                    ParseRulesJson(fileRaw);
+                }
+            }
+            catch { }
+        }
+
+        private void ParseRulesJson(string json)
+        {
+            try
+            {
+                var list = JsonSerializer.Deserialize<List<TtsComplexRuleCard>>(json);
+                ComplexRuleCards.Clear();
+                if (list != null)
+                {
+                    foreach (var card in list)
                     {
-                        foreach (var card in list)
+                        foreach (var clause in card.Clauses)
                         {
-                            foreach (var clause in card.Clauses)
-                            {
-                                clause.ParentCard = card;
-                            }
-                            ComplexRuleCards.Add(card);
+                            clause.ParentCard = card;
                         }
+                        ComplexRuleCards.Add(card);
                     }
                 }
-                catch { }
             }
+            catch { }
         }
 
         public void SaveRulesToSettings()
         {
-            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            settings.Values["SavedComplexRulesMatrixJSON"] = JsonSerializer.Serialize(ComplexRuleCards);
+            try
+            {
+                var json = JsonSerializer.Serialize(ComplexRuleCards);
+                string fallbackPath = Path.Combine(AppContext.BaseDirectory, "rules_matrix.json");
+                File.WriteAllText(fallbackPath, json);
+            }
+            catch { }
         }
 
         public async Task StartAsync(string bridgeUrl)
         {
-            _cts = new CancellationTokenSource();
-            _webSocket = new ClientWebSocket();
-
+            await _connectionLock.WaitAsync();
             try
             {
-                LogReceived?.Invoke($"🔌 Connecting to JakeyTTS Core Engine at {bridgeUrl}...");
-                await _webSocket.ConnectAsync(new Uri(bridgeUrl), _cts.Token);
-                LogReceived?.Invoke("✅ Connected! Provisioning system variable injection pipelines...");
+                if (IsConnected) return;
 
+                _cts?.Cancel();
+                _cts = new CancellationTokenSource();
+                _webSocket = new ClientWebSocket();
+
+                LogReceived?.Invoke($"🔌 Attempting connection to JakeyTTS Core Engine at {bridgeUrl}...");
+
+                using (var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, timeoutCts.Token))
+                {
+                    await _webSocket.ConnectAsync(new Uri(bridgeUrl), linkedCts.Token);
+                }
+
+                LogReceived?.Invoke("✅ Network pipe connected! Authorizing version handshake parameters...");
                 await SendHandshakeAsync();
 
-                // Initialization handshake pulls fresh data
                 _ = Task.Run(async () => await SynchronizeJakeyGlobalVariablesAsync(forceRefresh: true));
                 _ = Task.Run(ReceiveLoopAsync);
             }
+            catch (OperationCanceledException)
+            {
+                LogReceived?.Invoke("⚠️ Connection attempt timed out. JakeyTTS server might not be running.");
+                CleanupSocket();
+                HandleAutomaticRecovery(bridgeUrl);
+            }
             catch (Exception ex)
             {
-                LogReceived?.Invoke($"❌ Connection exception thrown: {ex.Message}");
+                LogReceived?.Invoke($"❌ Connection failed: {ex.Message}. Operating in offline standalone fallback mode.");
+                CleanupSocket();
+                HandleAutomaticRecovery(bridgeUrl);
+            }
+            finally
+            {
+                _connectionLock.Release();
             }
         }
 
         public async Task StopAsync()
         {
-            if (_cts != null) _cts.Cancel();
-            if (_webSocket != null && _webSocket.State == WebSocketState.Open)
+            await _connectionLock.WaitAsync();
+            try
             {
-                try
+                _isReconnecting = false;
+                if (_cts != null) _cts.Cancel();
+
+                if (_webSocket != null && _webSocket.State == WebSocketState.Open)
                 {
-                    await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing structural plugin context", CancellationToken.None);
+                    try
+                    {
+                        await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing structural plugin context", CancellationToken.None);
+                    }
+                    catch { }
                 }
-                catch { }
+                CleanupSocket();
+                LogReceived?.Invoke("🛑 Core connection interface closed cleanly.");
             }
-            LogReceived?.Invoke("🛑 Core connection interface terminated.");
+            finally
+            {
+                _connectionLock.Release();
+            }
+        }
+
+        private void CleanupSocket()
+        {
+            try { _webSocket?.Dispose(); } catch { }
+            _webSocket = null;
+        }
+
+        private void HandleAutomaticRecovery(string bridgeUrl)
+        {
+            if (_isReconnecting) return;
+            _isReconnecting = true;
+
+            Task.Run(async () =>
+            {
+                LogReceived?.Invoke("⏳ Auto-reconnect thread active. Retrying background connection in 10 seconds...");
+                while (_isReconnecting && !IsConnected)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10));
+                    if (!_isReconnecting) break;
+                    await StartAsync(bridgeUrl);
+                }
+                _isReconnecting = false;
+            });
         }
 
         private async Task SendHandshakeAsync()
         {
+            string iconBase64String = "";
+            try
+            {
+                string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "appicon.ico");
+                if (File.Exists(iconPath))
+                {
+                    byte[] iconBytes = await File.ReadAllBytesAsync(iconPath);
+                    iconBase64String = Convert.ToBase64String(iconBytes);
+                }
+            }
+            catch { }
+
+            string currentBinPath = "";
+            try
+            {
+                using (var currentProcess = Process.GetCurrentProcess())
+                {
+                    currentBinPath = currentProcess.MainModule?.FileName ?? "";
+                }
+            }
+            catch { }
+
             var handshake = new
             {
                 type = "register",
@@ -103,141 +202,179 @@ namespace DiapStash_Plugin
                     id = "diapstash-automation-plugin",
                     name = "DiapStash Integration Bridge",
                     version = "1.0.0",
-                    version_protocol = "1.0",
+                    protocol_version = "1.0",
+                    icon = iconBase64String,
+                    executable_path = currentBinPath,
+                    launch_invisible = false,
                     subscriptions = new[] { "redeems", "commands" }
                 }
             };
+
             await SendJsonAsync(handshake);
         }
 
         public async Task SynchronizeJakeyGlobalVariablesAsync(bool forceRefresh = false)
         {
-            if (_webSocket == null || _webSocket.State != WebSocketState.Open) return;
+            if (!IsConnected) return;
 
-            var state = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync(forceRefresh);
-            if (state == null) return;
-
-            string elapsedString = "0 minutes";
-            if (state.StartTime != DateTime.MinValue)
+            try
             {
-                DateTime localStart = state.StartTime.ToLocalTime();
-                TimeSpan diff = state.IsActiveSession ? (DateTime.Now - localStart) : (state.EndTime.Value.ToLocalTime() - localStart);
-                elapsedString = $"{(int)diff.TotalHours} hours and {diff.Minutes} minutes";
-            }
+                var state = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync(forceRefresh);
 
-            var dynamicCardTokens = new Dictionary<string, string>();
-
-            foreach (var card in ComplexRuleCards)
-            {
-                if (card.Clauses.Count == 0) continue;
-
-                bool blockEvaluatedAndPassed = false;
-                bool currentChainIsMatch = false;
-                string finalCardPhrase = string.Empty;
-
-                foreach (var clause in card.Clauses)
+                if (state == null)
                 {
-                    if (clause.LogicalOperator == "ELSE")
+                    LogReceived?.Invoke("⏳ Access token expired inside background context. Retrying headless refresh...");
+                    bool refreshSuccess = await DiapStashClient.Instance.RefreshAccessTokenHeadlessAsync();
+                    if (refreshSuccess)
                     {
-                        if (!blockEvaluatedAndPassed)
-                        {
-                            blockEvaluatedAndPassed = true;
-                            finalCardPhrase = clause.OutputMessage ?? string.Empty;
-                        }
-                        break;
-                    }
-
-                    bool clauseIsTrue = false;
-                    string actualValue = clause.TargetVariable switch
-                    {
-                        "Leak" => state.HasLeak ? "YES" : "NO",
-                        "Blowout" => (state.HasLeak && state.MessyLevel >= 2) ? "YES" : "NO",
-                        "Status" => state.IsActiveSession ? "Active" : "Completed",
-                        "Wetness" => state.Wetness.ToString(),
-                        "Messy" => state.MessyLevel.ToString(),
-                        _ => ""
-                    };
-
-                    if (int.TryParse(actualValue, out int currentNum) && int.TryParse(clause.TargetValue, out int targetNum))
-                    {
-                        clauseIsTrue = clause.ConditionType switch
-                        {
-                            "Equals" => currentNum == targetNum,
-                            "GreaterThan" => currentNum > targetNum,
-                            "LessThan" => currentNum < targetNum,
-                            _ => false
-                        };
-                    }
-                    else
-                    {
-                        clauseIsTrue = string.Equals(actualValue, clause.TargetValue, StringComparison.OrdinalIgnoreCase);
-                    }
-
-                    if (clause.LogicalOperator == "IF" || clause.LogicalOperator == "ELSE IF")
-                    {
-                        if (blockEvaluatedAndPassed) continue;
-
-                        currentChainIsMatch = clauseIsTrue;
-                    }
-                    else if (clause.LogicalOperator == "AND")
-                    {
-                        if (blockEvaluatedAndPassed) continue;
-
-                        currentChainIsMatch = currentChainIsMatch && clauseIsTrue;
-                    }
-
-                    if (clause.IsLastInLogicalBlock && !blockEvaluatedAndPassed)
-                    {
-                        if (currentChainIsMatch)
-                        {
-                            blockEvaluatedAndPassed = true;
-                            finalCardPhrase = clause.OutputMessage ?? string.Empty;
-                        }
+                        LogReceived?.Invoke("✨ Token successfully renewed. Syncing telemetry channels...");
+                        state = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync(forceRefresh = true);
                     }
                 }
 
-                string cleanCardKey = "diapstash_rule_" + card.CardName.Trim().ToLower().Replace(" ", "_");
-                dynamicCardTokens.Add(cleanCardKey, finalCardPhrase.Trim());
+                if (state == null)
+                {
+                    LogReceived?.Invoke("❌ Synchronize skipped: Background token evaluation rejected by server.");
+                    return;
+                }
+
+                string elapsedString = "0 minutes";
+                if (state.StartTime != DateTime.MinValue)
+                {
+                    DateTime localStart = state.StartTime.ToLocalTime();
+                    TimeSpan diff = state.IsActiveSession ? (DateTime.Now - localStart) : (state.EndTime.Value.ToLocalTime() - localStart);
+                    elapsedString = $"{(int)diff.TotalHours} hours and {diff.Minutes} minutes";
+                }
+
+                var dynamicCardTokens = new Dictionary<string, string>();
+
+                foreach (var card in ComplexRuleCards)
+                {
+                    if (card.Clauses.Count == 0) continue;
+
+                    bool blockEvaluatedAndPassed = false;
+                    bool currentChainIsMatch = false;
+                    string finalCardPhrase = string.Empty;
+
+                    foreach (var clause in card.Clauses)
+                    {
+                        if (clause.LogicalOperator == "ELSE")
+                        {
+                            if (!blockEvaluatedAndPassed)
+                            {
+                                blockEvaluatedAndPassed = true;
+                                finalCardPhrase = clause.OutputMessage ?? string.Empty;
+                            }
+                            break;
+                        }
+
+                        bool clauseIsTrue = false;
+                        string actualValue = clause.TargetVariable switch
+                        {
+                            "Leak" => state.HasLeak ? "YES" : "NO",
+                            "Blowout" => (state.HasLeak && state.MessyLevel >= 2) ? "YES" : "NO",
+                            "Status" => state.IsActiveSession ? "Active" : "Completed",
+                            "Wetness" => state.Wetness.ToString(),
+                            "Messy" => state.MessyLevel.ToString(),
+                            _ => ""
+                        };
+
+                        if (int.TryParse(actualValue, out int currentNum) && int.TryParse(clause.TargetValue, out int targetNum))
+                        {
+                            clauseIsTrue = clause.ConditionType switch
+                            {
+                                "Equals" => currentNum == targetNum,
+                                "GreaterThan" => currentNum > targetNum,
+                                "LessThan" => currentNum < targetNum,
+                                _ => false
+                            };
+                        }
+                        else
+                        {
+                            clauseIsTrue = string.Equals(actualValue, clause.TargetValue, StringComparison.OrdinalIgnoreCase);
+                        }
+
+                        if (clause.LogicalOperator == "IF" || clause.LogicalOperator == "ELSE IF")
+                        {
+                            if (blockEvaluatedAndPassed) continue;
+                            currentChainIsMatch = clauseIsTrue;
+                        }
+                        else if (clause.LogicalOperator == "AND")
+                        {
+                            if (blockEvaluatedAndPassed) continue;
+                            currentChainIsMatch = currentChainIsMatch && clauseIsTrue;
+                        }
+
+                        if (clause.IsLastInLogicalBlock && !blockEvaluatedAndPassed)
+                        {
+                            if (currentChainIsMatch)
+                            {
+                                blockEvaluatedAndPassed = true;
+                                finalCardPhrase = clause.OutputMessage ?? string.Empty;
+                            }
+                        }
+                    }
+
+                    string cleanCardKey = "diapstash_rule_" + card.CardName.Trim().ToLower().Replace(" ", "_");
+                    dynamicCardTokens.Add(cleanCardKey, finalCardPhrase.Trim());
+                }
+
+                string defaultTemplate = "Current diaper status is {diapstash_status}. Product in use: {diapstash_product}, size {diapstash_size}. Wetness level: {diapstash_wetness}, mess level: {diapstash_messy}. Elapsed runtime: {diapstash_elapsed}.";
+                string userCustomTemplate = defaultTemplate;
+
+                // FIXED: Pull custom layout text framework straight out of our backup file path cleanly
+                try
+                {
+                    string templatePath = Path.Combine(AppContext.BaseDirectory, "saved_template.txt");
+                    if (File.Exists(templatePath))
+                    {
+                        userCustomTemplate = File.ReadAllText(templatePath);
+                    }
+                }
+                catch
+                {
+                    userCustomTemplate = defaultTemplate;
+                }
+
+                userCustomTemplate = userCustomTemplate.Replace("{diapstash_product}", state.ProductName);
+                userCustomTemplate = userCustomTemplate.Replace("{diapstash_size}", state.Size);
+                userCustomTemplate = userCustomTemplate.Replace("{diapstash_wetness}", state.WetnessDisplay);
+                userCustomTemplate = userCustomTemplate.Replace("{diapstash_messy}", state.MessyDisplay);
+                userCustomTemplate = userCustomTemplate.Replace("{diapstash_elapsed}", elapsedString);
+                userCustomTemplate = userCustomTemplate.Replace("{diapstash_leak}", state.HasLeak ? "YES" : "NO");
+                userCustomTemplate = userCustomTemplate.Replace("{diapstash_status}", state.IsActiveSession ? "Active" : "Completed");
+
+                foreach (var token in dynamicCardTokens)
+                {
+                    userCustomTemplate = userCustomTemplate.Replace("{" + token.Key + "}", token.Value);
+                }
+
+                await UpdateGlobalVariableAsync("diapstash_change", userCustomTemplate);
+
+                foreach (var token in dynamicCardTokens)
+                {
+                    await UpdateGlobalVariableAsync(token.Key, token.Value);
+                }
+
+                await UpdateGlobalVariableAsync("diapstash_product", state.ProductName);
+                await UpdateGlobalVariableAsync("diapstash_size", state.Size);
+                await UpdateGlobalVariableAsync("diapstash_wetness", state.WetnessDisplay);
+                await UpdateGlobalVariableAsync("diapstash_wetness_percent", $"{state.WetnessPercentage}%");
+                await UpdateGlobalVariableAsync("diapstash_messy", state.MessyDisplay);
+                await UpdateGlobalVariableAsync("diapstash_messy_percent", $"{state.MessyPercentage}%");
+                await UpdateGlobalVariableAsync("diapstash_elapsed", elapsedString);
+                await UpdateGlobalVariableAsync("diapstash_leak", state.HasLeak ? "YES" : "NO");
+                await UpdateGlobalVariableAsync("diapstash_status", state.IsActiveSession ? "Active" : "Completed");
+
+                string stockSummary = await DiapStashClient.Instance.FetchCurrentStockSummaryAsync(forceRefresh);
+                await UpdateGlobalVariableAsync("diapstash_stock", stockSummary);
+
+                LogReceived?.Invoke("Base variable individualization macros updated successfully.");
             }
-
-            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
-            string defaultTemplate = "Current diaper status is {diapstash_status}. Product in use: {diapstash_product}, size {diapstash_size}. Wetness level: {diapstash_wetness}, mess level: {diapstash_messy}. Elapsed runtime: {diapstash_elapsed}.";
-            string userCustomTemplate = settings.Values["SavedTtsTemplate"]?.ToString() ?? defaultTemplate;
-
-            userCustomTemplate = userCustomTemplate.Replace("{diapstash_product}", state.ProductName);
-            userCustomTemplate = userCustomTemplate.Replace("{diapstash_size}", state.Size);
-            userCustomTemplate = userCustomTemplate.Replace("{diapstash_wetness}", state.WetnessDisplay);
-            userCustomTemplate = userCustomTemplate.Replace("{diapstash_messy}", state.MessyDisplay);
-            userCustomTemplate = userCustomTemplate.Replace("{diapstash_elapsed}", elapsedString);
-            userCustomTemplate = userCustomTemplate.Replace("{diapstash_leak}", state.HasLeak ? "YES" : "NO");
-            userCustomTemplate = userCustomTemplate.Replace("{diapstash_status}", state.IsActiveSession ? "Active" : "Completed");
-
-            foreach (var token in dynamicCardTokens)
+            catch (Exception ex)
             {
-                userCustomTemplate = userCustomTemplate.Replace("{" + token.Key + "}", token.Value);
+                LogReceived?.Invoke($"⚠️ Telemetry synchronization error: {ex.Message}. Retrying later.");
             }
-
-            await UpdateGlobalVariableAsync("diapstash_change", userCustomTemplate);
-
-            foreach (var token in dynamicCardTokens)
-            {
-                await UpdateGlobalVariableAsync(token.Key, token.Value);
-            }
-
-            await UpdateGlobalVariableAsync("diapstash_product", state.ProductName);
-            await UpdateGlobalVariableAsync("diapstash_size", state.Size);
-            await UpdateGlobalVariableAsync("diapstash_wetness", state.WetnessDisplay);
-            await UpdateGlobalVariableAsync("diapstash_wetness_percent", $"{state.WetnessPercentage}%");
-            await UpdateGlobalVariableAsync("diapstash_messy", state.MessyDisplay);
-            await UpdateGlobalVariableAsync("diapstash_messy_percent", $"{state.MessyPercentage}%");
-            await UpdateGlobalVariableAsync("diapstash_elapsed", elapsedString);
-            await UpdateGlobalVariableAsync("diapstash_leak", state.HasLeak ? "YES" : "NO");
-            await UpdateGlobalVariableAsync("diapstash_status", state.IsActiveSession ? "Active" : "Completed");
-
-            string stockSummary = await DiapStashClient.Instance.FetchCurrentStockSummaryAsync(forceRefresh);
-            await UpdateGlobalVariableAsync("diapstash_stock", stockSummary);
-
-            LogReceived?.Invoke("Base variable individualization macros updated successfully.");
         }
 
         private async Task UpdateGlobalVariableAsync(string key, string value)
@@ -257,19 +394,36 @@ namespace DiapStash_Plugin
         private async Task ReceiveLoopAsync()
         {
             var buffer = new byte[1024 * 16];
+            string currentTtsUrl = "ws://localhost:8889/";
 
-            while (_webSocket?.State == WebSocketState.Open && !_cts!.Token.IsCancellationRequested)
+            // FIXED: Pull configuration values safely out of local filesystem cache descriptors
+            try
             {
-                using var ms = new MemoryStream();
-                WebSocketReceiveResult result;
-
-                try
+                string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
+                if (File.Exists(credentialsPath))
                 {
+                    string rawCreds = File.ReadAllText(credentialsPath);
+                    using var doc = JsonDocument.Parse(rawCreds);
+                    var root = doc.RootElement;
+                    currentTtsUrl = root.TryGetProperty("TtsUrl", out var urlProp) ? urlProp.GetString() ?? currentTtsUrl : currentTtsUrl;
+                }
+            }
+            catch { }
+
+            try
+            {
+                while (IsConnected && !_cts!.Token.IsCancellationRequested)
+                {
+                    using var ms = new MemoryStream();
+                    WebSocketReceiveResult result;
+
                     do
                     {
-                        result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), _cts.Token);
+                        result = await _webSocket!.ReceiveAsync(new ArraySegment<byte>(buffer), _cts.Token);
                         ms.Write(buffer, 0, result.Count);
                     } while (!result.EndOfMessage);
+
+                    if (result.MessageType == WebSocketMessageType.Close) break;
 
                     string message = Encoding.UTF8.GetString(ms.ToArray());
                     if (string.IsNullOrWhiteSpace(message)) continue;
@@ -278,7 +432,25 @@ namespace DiapStash_Plugin
                     var root = doc.RootElement;
                     string type = root.GetProperty("type").GetString() ?? "";
 
-                    if (type == "event_broadcast")
+                    if (type == "auth_status")
+                    {
+                        bool approved = root.GetProperty("approved").GetBoolean();
+                        LogReceived?.Invoke(approved ? "✨ Access approved by JakeyTTS!" : "⚠️ Access rejected or pending approval in JakeyTTS.");
+                    }
+                    else if (type == "error")
+                    {
+                        string errMsg = root.GetProperty("message").GetString() ?? "Unknown API error";
+                        LogReceived?.Invoke($"❌ Server error envelope: {errMsg}");
+
+                        if (errMsg.Contains("version", StringComparison.OrdinalIgnoreCase))
+                        {
+                            LogReceived?.Invoke("🛑 Incompatible core protocol mismatch. Stopping connection.");
+                            _isReconnecting = false;
+                            CleanupSocket();
+                            return;
+                        }
+                    }
+                    else if (type == "event_broadcast")
                     {
                         string scope = root.TryGetProperty("scope", out var sProp) ? sProp.GetString() ?? "" : "";
                         if (scope == "commands" || scope == "redeems")
@@ -287,19 +459,33 @@ namespace DiapStash_Plugin
                         }
                     }
                 }
-                catch (Exception ex)
+            }
+            catch (Exception ex)
+            {
+                LogReceived?.Invoke($"🔌 WebSocket connection lost: {ex.Message}");
+            }
+            finally
+            {
+                bool dynamicRecoveryNeeded = _isReconnecting == false && _cts?.IsCancellationRequested == false;
+                CleanupSocket();
+
+                if (dynamicRecoveryNeeded)
                 {
-                    LogReceived?.Invoke($"❌ Pipeline stream tracking exception: {ex.Message}");
+                    HandleAutomaticRecovery(currentTtsUrl);
                 }
             }
         }
 
         private async Task SendJsonAsync(object data)
         {
-            if (_webSocket == null || _webSocket.State != WebSocketState.Open) return;
-            string json = JsonSerializer.Serialize(data);
-            byte[] bytes = Encoding.UTF8.GetBytes(json);
-            await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+            if (!IsConnected) return;
+            try
+            {
+                string json = JsonSerializer.Serialize(data);
+                byte[] bytes = Encoding.UTF8.GetBytes(json);
+                await _webSocket!.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+            }
+            catch { }
         }
     }
 }
