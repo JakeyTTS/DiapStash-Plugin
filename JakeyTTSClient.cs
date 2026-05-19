@@ -32,8 +32,6 @@ namespace DiapStash_Plugin
 
         public void LoadRulesFromSettings()
         {
-            // FIXED: Stripped out ApplicationData container lookup loops entirely to ensure compatibility with unpackaged runtimes.
-            // All configurations now load cleanly from native local files.
             try
             {
                 string fallbackPath = Path.Combine(AppContext.BaseDirectory, "rules_matrix.json");
@@ -322,7 +320,6 @@ namespace DiapStash_Plugin
                 string defaultTemplate = "Current diaper status is {diapstash_status}. Product in use: {diapstash_product}, size {diapstash_size}. Wetness level: {diapstash_wetness}, mess level: {diapstash_messy}. Elapsed runtime: {diapstash_elapsed}.";
                 string userCustomTemplate = defaultTemplate;
 
-                // FIXED: Pull custom layout text framework straight out of our backup file path cleanly
                 try
                 {
                     string templatePath = Path.Combine(AppContext.BaseDirectory, "saved_template.txt");
@@ -396,7 +393,6 @@ namespace DiapStash_Plugin
             var buffer = new byte[1024 * 16];
             string currentTtsUrl = "ws://localhost:8889/";
 
-            // FIXED: Pull configuration values safely out of local filesystem cache descriptors
             try
             {
                 string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");

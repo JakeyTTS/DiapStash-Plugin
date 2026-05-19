@@ -44,7 +44,6 @@ namespace DiapStash_Plugin
             NavView.SelectedItem = NavView.MenuItems[0];
             MainContentFrame.Content = _homePage;
 
-            // Always activate the window normally to ensure it displays standard layouts natively
             this.Activate();
         }
 

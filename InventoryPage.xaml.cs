@@ -23,8 +23,6 @@ namespace DiapStash_Plugin
             string currentToken = string.Empty;
             string currentClientId = string.Empty;
 
-            // FIXED: Replaced call to Windows.Storage.ApplicationData container with a raw disk file reader 
-            // to ensure unpackaged WinUI 3 environments don't throw critical runtime exceptions.
             try
             {
                 string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");

@@ -11,9 +11,7 @@ namespace DiapStash_Plugin
         public InjectionsPage()
         {
             this.InitializeComponent();
-
-            // FIXED: Eliminamos por completo ApplicationData.Current. 
-            // Ahora leemos la URL de JakeyTTS desde el archivo local credentials.json en el disco.
+            
             string ttsUrl = "ws://localhost:8889/";
             try
             {
@@ -36,7 +34,6 @@ namespace DiapStash_Plugin
             string ttsUrl = TtsServerBox.Text.Trim();
             if (string.IsNullOrWhiteSpace(ttsUrl)) return;
 
-            // FIXED: Modificamos y guardamos la URL de red de forma segura dentro del JSON local en disco
             try
             {
                 string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
