@@ -57,6 +57,21 @@ namespace DiapStash_Plugin
                     }
                     else if (ctx.Request.Url!.AbsolutePath == "/overlay/config")
                     {
+                        try
+                        {
+                            var state = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync();
+                            if (state != null)
+                            {
+                                LiveProductName = state.ProductName ?? "Standard Diaper Product";
+                                LiveSize = state.Size ?? "N/A";
+                                LiveWetPercentage = state.WetnessPercentage;
+                                LiveMessPercentage = state.MessyPercentage;
+                                LiveStatusMessage = state.IsActiveSession ? "Active" : "Completed";
+                                LiveImageUrl = state.ImageUrl ?? "";
+                            }
+                        }
+                        catch { }
+
                         var data = new
                         {
                             cardW = CardW,

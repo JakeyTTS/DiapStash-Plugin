@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -110,6 +110,12 @@ namespace DiapStash_Plugin
                 CleanupSocket();
                 HandleAutomaticRecovery(bridgeUrl);
             }
+            catch (HttpRequestException)
+            {
+                LogReceived?.Invoke("⚠️ Standalone mode active: Local engine at port 8889 is offline. Auto-reconnect active.");
+                CleanupSocket();
+                HandleAutomaticRecovery(bridgeUrl);
+            }
             catch (OperationCanceledException)
             {
                 LogReceived?.Invoke("⚠️ Connection attempt timed out. JakeyTTS server might not be running.");
@@ -213,7 +219,8 @@ namespace DiapStash_Plugin
                     icon = iconBase64String,
                     executable_path = currentBinPath,
                     launch_invisible = false,
-                    subscriptions = new[] { "redeems", "commands" }
+                    subscriptions = new[] { "redeems", "commands" },
+                    triggers = new[] { "diapstash_show" }
                 }
             };
 
@@ -244,6 +251,21 @@ namespace DiapStash_Plugin
                     LogReceived?.Invoke("❌ Synchronize skipped: Background token evaluation rejected by server.");
                     return;
                 }
+
+                try
+                {
+                    var overlay = OverlayServer.Instance;
+                    if (overlay != null)
+                    {
+                        overlay.LiveProductName = state.ProductName ?? "Standard Diaper Product";
+                        overlay.LiveSize = state.Size ?? "N/A";
+                        overlay.LiveWetPercentage = state.WetnessPercentage;
+                        overlay.LiveMessPercentage = state.MessyPercentage;
+                        overlay.LiveStatusMessage = state.IsActiveSession ? "Active" : "Completed";
+                        overlay.LiveImageUrl = state.ImageUrl ?? "";
+                    }
+                }
+                catch { }
 
                 string elapsedString = "0 minutes";
                 if (state.StartTime != DateTime.MinValue)
@@ -461,6 +483,43 @@ namespace DiapStash_Plugin
                         if (scope == "commands" || scope == "redeems")
                         {
                             _ = Task.Run(async () => await SynchronizeJakeyGlobalVariablesAsync(forceRefresh: false));
+                        }
+                    }
+                    else if (type == "variable_triggered")
+                    {
+                        string varName = root.TryGetProperty("variable", out var vProp) ? vProp.GetString() ?? "" : "";
+                        if (varName.Equals("diapstash_show", StringComparison.OrdinalIgnoreCase))
+                        {
+                            LogReceived?.Invoke("🎬 JakeyTTS triggered overlay via variable placeholder.");
+                            OverlayServer.Instance.ForcePreviewTrigger = true;
+                        }
+                    }
+                    else if (type == "trigger_event")
+                    {
+                        try
+                        {
+                            var payload = root.GetProperty("payload");
+                            string source = payload.TryGetProperty("source", out var sProp) ? sProp.GetString() ?? "" : "";
+                            string name = payload.TryGetProperty("name", out var nProp) ? nProp.GetString() ?? "" : "";
+                            
+                            string triggerName = payload.TryGetProperty("trigger", out var tProp) ? tProp.GetString() ?? "" : "";
+                            if (string.IsNullOrEmpty(triggerName))
+                            {
+                                triggerName = payload.TryGetProperty("variable", out var vProp) ? vProp.GetString() ?? "" : "";
+                            }
+
+                            _ = Task.Run(async () => await SynchronizeJakeyGlobalVariablesAsync(forceRefresh: true));
+
+                            LogReceived?.Invoke($"🎬 JakeyTTS triggered overlay from {source} '{name}' with trigger '{triggerName}'.");
+
+                            if (triggerName.Equals("diapstash_show", StringComparison.OrdinalIgnoreCase))
+                            {
+                                OverlayServer.Instance.ForcePreviewTrigger = true;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogReceived?.Invoke($"⚠️ Error parsing trigger_event payload: {ex.Message}");
                         }
                     }
                 }

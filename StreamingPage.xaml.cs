@@ -726,7 +726,75 @@ namespace DiapStash_Plugin
             
             await dialog.ShowAsync();
         }
-        private async void TtsHelpBtn_Click(object sender, RoutedEventArgs e) { await new ContentDialog { Title = "JakeyTTS", Content = "GET request to: http://localhost:8890/overlay/trigger", CloseButtonText = "OK", XamlRoot = this.Content.XamlRoot }.ShowAsync(); }
+        private async void TtsHelpBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var stack = new StackPanel { Spacing = 12, Width = 480 };
+            
+            stack.Children.Add(new TextBlock { 
+                Text = "JakeyTTS triggers this overlay automatically when mapped commands or channel rewards are executed.", 
+                TextWrapping = TextWrapping.Wrap, 
+                Margin = new Thickness(0,0,0,4) 
+            });
+
+            var recLabel = new TextBlock {
+                Text = "Method 1: UI Trigger Plugin Column (Recommended)",
+                FontSize = 14,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                Margin = new Thickness(0,8,0,0)
+            };
+            stack.Children.Add(recLabel);
+
+            var stepsPanel1 = new StackPanel { Spacing = 6 };
+            var steps1 = new string[] {
+                "1. Open JakeyTTS and navigate to the 'Commands' or 'Twitch Rewards' page.",
+                "2. Find the command/reward you want to use (or create a new one).",
+                "3. In the 'Trigger Plugin' column, click the dropdown and select:",
+                "   👉 'diapstash_show (DiapStash Integration Bridge)'",
+                "4. Click 'Save All Changes'. When this command/reward triggers on Twitch, the overlay will automatically slide in."
+            };
+            foreach (var step in steps1)
+            {
+                stepsPanel1.Children.Add(new TextBlock { 
+                    Text = step, 
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 13
+                });
+            }
+            stack.Children.Add(stepsPanel1);
+
+            var legacyLabel = new TextBlock {
+                Text = "Method 2: TTS response variables (Alternative)",
+                FontSize = 14,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                Margin = new Thickness(0,10,0,0)
+            };
+            stack.Children.Add(legacyLabel);
+
+            var stepsPanel2 = new StackPanel { Spacing = 6 };
+            var steps2 = new string[] {
+                "1. Add '{diapstash_show}' anywhere in a command or reward's TTS response text box.",
+                "2. JakeyTTS will automatically filter out the brace tag (returning empty text for it to the speaker) and send a WebSocket event to show the DiapStash overlay."
+            };
+            foreach (var step in steps2)
+            {
+                stepsPanel2.Children.Add(new TextBlock { 
+                    Text = step, 
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 13
+                });
+            }
+            stack.Children.Add(stepsPanel2);
+
+            var dialog = new ContentDialog
+            {
+                Title = "JakeyTTS Setup Instructions",
+                Content = stack,
+                CloseButtonText = "Close",
+                XamlRoot = this.Content.XamlRoot
+            };
+            
+            await dialog.ShowAsync();
+        }
         private void StartPreviewTimer()
         {
             if (_previewTimer == null)
