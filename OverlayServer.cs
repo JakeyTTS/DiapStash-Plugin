@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -10,34 +11,30 @@ namespace DiapStash_Plugin
     {
         private static OverlayServer? _instance;
         public static OverlayServer Instance => _instance ??= new OverlayServer();
-
         private HttpListener? _listener;
         private bool _isRunning = false;
 
-        public double CardW { get; set; } = 800; public double CardH { get; set; } = 450;
+        // Propiedades de diseño
+        public double CardW { get; set; } = 800; public double CardH { get; set; } = 200;
         public int TransitionType { get; set; } = 0; public double TransitionDurationMs { get; set; } = 400;
+        public string CardBackgroundHex { get; set; } = "#FFFFFF";
         public bool ForcePreviewTrigger { get; set; } = false;
-        public string Title { get; set; } = "TELEMETRY";
-        public string ProductName { get; set; } = "Product Name (Size M)";
-        public string ImageUrl { get; set; } = "";
-        public int RealWetPercentage { get; set; } = 50;
-        public int RealMessPercentage { get; set; } = 20;
-        public string WetColor { get; set; } = "#00BFFF";
-        public string MessColor { get; set; } = "#CD853F";
-        public bool ShowWetBar { get; set; } = true;
-        public bool ShowMessBar { get; set; } = true;
-        public double BarW { get; set; } = 200;
-        public double ImgX { get; set; } = 50; public double ImgY { get; set; } = 50;
-        public double ImgW { get; set; } = 80; public double ImgH { get; set; } = 80;
-        public double TxtX { get; set; } = 150; public double TxtY { get; set; } = 50;
-        public double ProdX { get; set; } = 150; public double ProdY { get; set; } = 80;
-        public double BarsX { get; set; } = 150; public double BarsY { get; set; } = 110;
+        public bool IsEditing { get; set; } = false;
+
+        // Live Data (Updated periodically by StreamingPage)
+        public string LiveProductName { get; set; } = "Product Name";
+        public string LiveSize { get; set; } = "M";
+        public int LiveWetPercentage { get; set; } = 50;
+        public int LiveMessPercentage { get; set; } = 20;
+        public string LiveStatusMessage { get; set; } = "TELEMETRY";
+        public string LiveImageUrl { get; set; } = "";
+
+        // Dynamic Elements
+        public List<OverlayElement> Elements { get; set; } = new List<OverlayElement>();
 
         public void Start()
         {
-            if (_isRunning) return;
-            _listener = new HttpListener();
-            _listener.Prefixes.Add("http://localhost:8890/overlay/");
+            if (_isRunning) return; _listener = new HttpListener(); _listener.Prefixes.Add("http://localhost:8890/overlay/");
             try { _listener.Start(); _isRunning = true; Task.Run(ListenLoop); } catch { }
         }
 
@@ -47,78 +44,217 @@ namespace DiapStash_Plugin
             {
                 try
                 {
-                    var ctx = await _listener!.GetContextAsync();
-                    var resp = ctx.Response;
+                    var ctx = await _listener!.GetContextAsync(); 
+                    var resp = ctx.Response; 
                     resp.Headers.Add("Access-Control-Allow-Origin", "*");
+                    resp.Headers.Add("Cache-Control", "no-cache, no-store, must-revalidate");
+                    resp.Headers.Add("Pragma", "no-cache");
+                    resp.Headers.Add("Expires", "0");
 
                     if (ctx.Request.Url!.AbsolutePath == "/overlay/trigger")
                     {
-                        ForcePreviewTrigger = true;
-                        resp.StatusCode = 200;
-                        resp.ContentLength64 = 0;
+                        ForcePreviewTrigger = true; resp.StatusCode = 200; resp.ContentLength64 = 0;
                     }
                     else if (ctx.Request.Url!.AbsolutePath == "/overlay/config")
                     {
-                        var data = new { cardW = CardW, cardH = CardH, transType = TransitionType, transDur = TransitionDurationMs, title = Title, product = ProductName, imgUrl = ImageUrl, wetP = RealWetPercentage, messP = RealMessPercentage, wetCol = WetColor, messCol = MessColor, showWet = ShowWetBar, showMess = ShowMessBar, imgX = ImgX, imgY = ImgY, imgW = ImgW, imgH = ImgH, txtX = TxtX, txtY = TxtY, prodX = ProdX, prodY = ProdY, barsX = BarsX, barsY = BarsY, barW = BarW, trigger = ForcePreviewTrigger };
+                        var data = new
+                        {
+                            cardW = CardW,
+                            cardH = CardH,
+                            transType = TransitionType,
+                            transDur = TransitionDurationMs,
+                            bgHex = CardBackgroundHex,
+                            
+                            liveProductName = LiveProductName,
+                            liveSize = LiveSize,
+                            liveWet = LiveWetPercentage,
+                            liveMess = LiveMessPercentage,
+                            liveStatus = LiveStatusMessage,
+                            liveImage = LiveImageUrl,
+                            
+                            elements = Elements,
+                            
+                            trigger = ForcePreviewTrigger,
+                            isEditing = IsEditing
+                        };
                         if (ForcePreviewTrigger) ForcePreviewTrigger = false;
-                        byte[] b = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(data));
-                        await resp.OutputStream.WriteAsync(b, 0, b.Length);
+                        var opts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+                        byte[] b = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(data, opts)); await resp.OutputStream.WriteAsync(b, 0, b.Length);
                     }
-                    else
-                    {
-                        byte[] h = Encoding.UTF8.GetBytes(GetHtml());
-                        await resp.OutputStream.WriteAsync(h, 0, h.Length);
-                    }
+                    else { byte[] h = Encoding.UTF8.GetBytes(GetHtml()); await resp.OutputStream.WriteAsync(h, 0, h.Length); }
                     resp.Close();
                 }
                 catch { }
             }
         }
 
-        private string GetHtml() => @"<!DOCTYPE html><html><head><style>
-            body { background: transparent; overflow: hidden; margin: 0; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; }
-            :root { --dur: 0.4s; }
-            .canvas { position: relative; background: white; border-radius: 12px; opacity: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.15); transition: all var(--dur) ease-out; }
-            .canvas[data-anim='1'] { transform: scale(0.8); }
-            .canvas[data-anim='2'] { transform: translateX(-50px); }
-            .canvas[data-anim='3'] { transform: translateX(50px); }
-            .canvas[data-anim='4'] { transform: translateY(-50px); }
-            .canvas[data-anim='5'] { transform: translateY(50px); }
-            .canvas[data-anim='6'] { transform: scale(0.5); }
-            .canvas.active { opacity: 1; transform: scale(1) translate(0, 0); }
-            .canvas.active[data-anim='6'] { transition-timing-function: cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-            .abs { position: absolute; }
-            .img-box { background: #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-            .bar { height: 10px; background: #eee; border-radius: 5px; margin-top: 5px; }
-            .fill { height: 100%; border-radius: 5px; transition: width 1s ease-out; }
+        private string GetHtml() => @"<!DOCTYPE html><html><head>
+        <meta http-equiv='cache-control' content='no-cache, no-store, must-revalidate'>
+        <meta http-equiv='pragma' content='no-cache'>
+        <meta http-equiv='expires' content='0'>
+        <link href='https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap' rel='stylesheet'>
+        <style>
+            body { background: transparent; overflow: hidden; margin: 0; font-family: 'Outfit', 'Segoe UI', sans-serif; }
+            #wrapper { position: absolute; left: 50%; top: 50%; width: var(--cardW); height: var(--cardH); transform: translate(-50%, -50%) scale(var(--scale)); display: flex; align-items: center; justify-content: center; }
+            :root { --dur: 0.4s; --cardW: 800px; --cardH: 200px; --scale: 1; }
+            .canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(18, 18, 20, 0.65); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); overflow: hidden; color: white; transition: all var(--dur) cubic-bezier(0.25, 1, 0.5, 1); opacity: 0; }
+            .canvas.trans-0 { opacity: 0; } .canvas.trans-0.active { opacity: 1; }
+            .canvas.trans-1 { opacity: 0; transform: scale(0.85); } .canvas.trans-1.active { opacity: 1; transform: scale(1); }
+            .canvas.trans-2 { opacity: 0; transform: translateX(100px); } .canvas.trans-2.active { opacity: 1; transform: translateX(0); }
+            .canvas.trans-3 { opacity: 0; transform: translateX(-100px); } .canvas.trans-3.active { opacity: 1; transform: translateX(0); }
+            .canvas.trans-4 { opacity: 0; transform: translateY(100px); } .canvas.trans-4.active { opacity: 1; transform: translateY(0); }
+            .canvas.trans-5 { opacity: 0; transform: translateY(-100px); } .canvas.trans-5.active { opacity: 1; transform: translateY(0); }
+            .canvas.trans-6 { opacity: 0; transform: scale(0.5); transition: all var(--dur) cubic-bezier(0.175, 0.885, 0.32, 1.275); } .canvas.trans-6.active { opacity: 1; transform: scale(1); }
         </style></head><body>
-            <div id='c' class='canvas'>
-                <div id='i' class='abs img-box'><span id='icon'>🛒</span><img id='real-img' src='' style='width:100%; height:100%; object-fit:cover; display:none;'/></div>
-                <div id='txt' class='abs'><h2 id='t' style='margin:0;'></h2></div>
-                <div id='prod' class='abs'><p id='p_name' style='margin:0; color:#666;'></p></div>
-                <div id='m' class='abs'></div>
+            <div id='wrapper'>
+                <div id='c' class='canvas'></div>
             </div>
             <script>
-                const c = document.getElementById('c'), m = document.getElementById('m');
-                async function sync() {
-                    const d = await (await fetch('http://localhost:8890/overlay/config?t='+Date.now())).json();
-                    c.style.width = d.cardW + 'px'; c.style.height = d.cardH + 'px';
-                    document.documentElement.style.setProperty('--dur', (d.transDur / 1000) + 's');
-                    c.setAttribute('data-anim', d.transType);
-                    document.getElementById('t').innerText = d.title;
-                    document.getElementById('p_name').innerText = d.product;
-                    const img = document.getElementById('i');
-                    img.style.left = d.imgX + 'px'; img.style.top = d.imgY + 'px';
-                    img.style.width = d.imgW + 'px'; img.style.height = d.imgH + 'px';
-                    if(d.imgUrl) { document.getElementById('real-img').src=d.imgUrl; document.getElementById('real-img').style.display='block'; document.getElementById('icon').style.display='none'; }
-                    document.getElementById('txt').style.left = d.txtX + 'px'; document.getElementById('txt').style.top = d.txtY + 'px';
-                    document.getElementById('prod').style.left = d.prodX + 'px'; document.getElementById('prod').style.top = d.prodY + 'px';
-                    m.style.left = d.barsX + 'px'; m.style.top = d.barsY + 'px';
-                    m.innerHTML = `<div style='color:${d.wetCol}'>Wet <span style='float:right'>${d.wetP}%</span><div class='bar' style='width:${d.barW}px'><div class='fill' style='width:${d.wetP}%; background:${d.wetCol}'></div></div></div>
-                                   <div style='color:${d.messCol}'>Mess <span style='float:right'>${d.messP}%</span><div class='bar' style='width:${d.barW}px'><div class='fill' style='width:${d.messP}%; background:${d.messCol}'></div></div></div>`;
-                    if(d.trigger) { c.classList.add('active'); setTimeout(()=>c.classList.remove('active'), 6000); }
+                const wrapper = document.getElementById('wrapper'), c = document.getElementById('c');
+                let currentTrans = -1; let isVisible = false; let hideTimeout;
+
+                function formatCssColor(hex) {
+                    if (!hex) return 'transparent';
+                    hex = hex.trim();
+                    if (hex.startsWith('#') && hex.length === 9) {
+                        const a = hex.substring(1, 3);
+                        const r = hex.substring(3, 5);
+                        const g = hex.substring(5, 7);
+                        const b = hex.substring(7, 9);
+                        return `#${r}${g}${b}${a}`;
+                    }
+                    return hex;
                 }
-                setInterval(sync, 800);
+
+                async function sync() {
+                    try {
+                        const d = await (await fetch('/overlay/config?t='+Date.now())).json();
+                        document.documentElement.style.setProperty('--cardW', d.cardW + 'px');
+                        document.documentElement.style.setProperty('--cardH', d.cardH + 'px');
+                        c.style.background = formatCssColor(d.bgHex);
+                        const sX = window.innerWidth / d.cardW; const sY = window.innerHeight / d.cardH;
+                        document.documentElement.style.setProperty('--scale', Math.min(sX, sY) * 0.95);
+                        document.documentElement.style.setProperty('--dur', (d.transDur / 1000) + 's');
+                        
+                        let transChanged = false;
+                        if (currentTrans !== d.transType) {
+                            const oldTrans = currentTrans;
+                            c.classList.remove('trans-' + currentTrans);
+                            currentTrans = d.transType;
+                            c.classList.add('trans-' + d.transType);
+                            if (oldTrans !== -1) {
+                                transChanged = true;
+                            }
+                        }
+                        
+                        c.innerHTML = ''; // Limpiar canvas
+                        if (d.elements) {
+                            d.elements.sort((a,b) => (a.zIndex !== undefined ? a.zIndex : a.ZIndex) - (b.zIndex !== undefined ? b.zIndex : b.ZIndex)).forEach(el => {
+                                const dom = document.createElement('div');
+                                dom.style.position = 'absolute';
+                                dom.style.left = (el.x !== undefined ? el.x : el.X) + 'px';
+                                dom.style.top = (el.y !== undefined ? el.y : el.Y) + 'px';
+                                dom.style.width = (el.width !== undefined ? el.width : el.Width) + 'px';
+                                dom.style.height = (el.height !== undefined ? el.height : el.Height) + 'px';
+                                dom.style.zIndex = el.zIndex !== undefined ? el.zIndex : el.ZIndex;
+                                
+                                const type = el.elementType || el.$type || el.ElementType;
+                                if (type === 'text') {
+                                    const ds = el.dataSource || el.DataSource;
+                                    let txt = el.customText || el.CustomText;
+                                    if (ds === 'ProductName') txt = d.liveProductName;
+                                    else if (ds === 'Size') txt = d.liveSize;
+                                    else if (ds === 'Wetness') txt = d.liveWet + '%';
+                                    else if (ds === 'Messiness') txt = d.liveMess + '%';
+                                    else if (ds === 'LiveStatus') txt = d.liveStatus;
+                                    
+                                    dom.innerText = txt;
+                                    dom.style.fontFamily = el.fontFamily || el.FontFamily;
+                                    dom.style.fontSize = (el.fontSize !== undefined ? el.fontSize : el.FontSize) + 'px';
+                                    dom.style.fontWeight = el.fontWeight || el.FontWeight;
+                                    dom.style.fontStyle = el.fontStyle || el.FontStyle || 'normal';
+                                    dom.style.color = formatCssColor(el.colorHex || el.ColorHex);
+                                    
+                                    const wrap = el.textWrap !== undefined ? el.textWrap : el.TextWrap;
+                                    dom.style.whiteSpace = wrap ? 'normal' : 'nowrap';
+                                    dom.style.overflow = 'hidden';
+                                    dom.style.textShadow = '0 1px 2px rgba(0,0,0,0.1)';
+                                } 
+                                else if (type === 'bar') {
+                                    const ds = el.dataSource || el.DataSource;
+                                    let val = 50;
+                                    if (ds === 'Wetness') val = d.liveWet;
+                                    else if (ds === 'Messiness') val = d.liveMess;
+                                    
+                                    dom.style.background = formatCssColor(el.bgColorHex || el.BgColorHex);
+                                    dom.style.borderRadius = '6px';
+                                    dom.style.overflow = 'hidden';
+                                    dom.style.boxShadow = 'inset 0 1px 3px rgba(0,0,0,0.3)';
+                                    
+                                    const fill = document.createElement('div');
+                                    const fillCol = el.fillColorHex || el.FillColorHex;
+                                    fill.style.background = formatCssColor(fillCol);
+                                    fill.style.borderRadius = '6px';
+                                    fill.style.boxShadow = `0 0 10px ${formatCssColor(fillCol)}`;
+                                    fill.style.transition = 'width 1s ease, height 1s ease';
+                                    
+                                    const orient = el.orientation || el.Orientation;
+                                    const widthVal = el.width !== undefined ? el.width : el.Width;
+                                    const heightVal = el.height !== undefined ? el.height : el.Height;
+                                    if (orient === 'Horizontal') {
+                                        fill.style.height = '100%';
+                                        fill.style.width = val + '%';
+                                    } else {
+                                        fill.style.width = '100%';
+                                        fill.style.height = val + '%';
+                                        fill.style.position = 'absolute';
+                                        fill.style.bottom = '0';
+                                    }
+                                    dom.appendChild(fill);
+                                }
+                                else if (type === 'image') {
+                                    const ds = el.dataSource || el.DataSource;
+                                    let src = el.customUrl || el.CustomUrl;
+                                    if (ds === 'DiapStashImage') src = d.liveImage;
+                                    
+                                    dom.style.borderRadius = '12px';
+                                    dom.style.border = '1px solid rgba(0,0,0,0.1)';
+                                    dom.style.overflow = 'hidden';
+                                    dom.style.display = 'flex';
+                                    dom.style.alignItems = 'center';
+                                    dom.style.justifyContent = 'center';
+                                    dom.style.background = 'rgba(0,0,0,0.05)';
+                                    
+                                    if (src) {
+                                        const img = document.createElement('img');
+                                        img.src = src;
+                                        img.style.width = '100%';
+                                        img.style.height = '100%';
+                                        const stretch = el.stretch || el.Stretch;
+                                        img.style.objectFit = stretch === 'Uniform' ? 'contain' : (stretch === 'UniformToFill' ? 'cover' : 'fill');
+                                        dom.appendChild(img);
+                                    } else {
+                                        dom.innerHTML = `<span style='font-size:24px'>🛒</span>`;
+                                    }
+                                }
+                                c.appendChild(dom);
+                            });
+                        }
+                        
+                        if (d.trigger || transChanged) {
+                            clearTimeout(hideTimeout);
+                            c.classList.remove('active');
+                            void c.offsetWidth; // Force reflow
+                            c.classList.add('active');
+                            isVisible = true;
+                            
+                            hideTimeout = setTimeout(() => {
+                                c.classList.remove('active');
+                                isVisible = false;
+                            }, 6000);
+                        }
+                    } catch(e) { console.error('Sync failed', e); }
+                } setInterval(sync, 800);
             </script>
         </body></html>";
     }
