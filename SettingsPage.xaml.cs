@@ -11,22 +11,22 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace DiapStash_Plugin
 {
-    public partial class PortalPage : UserControl
+    public partial class SettingsPage : UserControl
     {
         private HttpListener? _oauthListener;
-
         private readonly HttpClient _tokenHttpClient = new HttpClient(new HttpClientHandler
         {
             ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
         });
 
-        public PortalPage()
+        public SettingsPage()
         {
             this.InitializeComponent();
 
-            // FIXED: Read values from the local JSON config file instead of Windows ApplicationData containers
             string clientId = "";
             string token = "";
+            string ttsUrl = "ws://localhost:8889/";
+
             try
             {
                 string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
@@ -37,8 +37,8 @@ namespace DiapStash_Plugin
                     var root = doc.RootElement;
                     clientId = root.TryGetProperty("ClientId", out var idProp) ? idProp.GetString() ?? "" : "";
                     token = root.TryGetProperty("AccessToken", out var tokenProp) ? tokenProp.GetString() ?? "" : "";
+                    ttsUrl = root.TryGetProperty("TtsUrl", out var urlProp) ? urlProp.GetString() ?? ttsUrl : ttsUrl;
 
-                    // Attempt to fetch ClientSecret from disk if it was saved previously
                     if (root.TryGetProperty("ClientSecret", out var secretProp))
                     {
                         ClientSecretBox.Password = secretProp.GetString() ?? "";
@@ -49,6 +49,165 @@ namespace DiapStash_Plugin
 
             ClientIdBox.Text = clientId;
             StashTokenBox.Text = token;
+            TtsServerBox.Text = ttsUrl;
+
+            // Initialize Theme ComboBox state
+            ThemeComboBox.SelectedIndex = 0; // Default to System Default on boot
+            if (MainWindow.Instance?.Content is FrameworkElement fe)
+            {
+                if (fe.RequestedTheme == ElementTheme.Light) ThemeComboBox.SelectedIndex = 1;
+                else if (fe.RequestedTheme == ElementTheme.Dark) ThemeComboBox.SelectedIndex = 2;
+            }
+
+            SetupWizardDialog.XamlRoot = this.XamlRoot;
+        }
+
+        private int _currentWizardStep = 1;
+
+        public async void LaunchSetupWizard_Click(object sender, RoutedEventArgs e)
+        {
+            await LaunchSetupWizardAsync();
+        }
+
+        public async Task LaunchSetupWizardAsync()
+        {
+            _currentWizardStep = 1;
+            UpdateWizardUi();
+            WizardClientIdBox.Text = ClientIdBox.Text;
+            WizardClientSecretBox.Password = ClientSecretBox.Password;
+            if (this.XamlRoot != null) {
+                SetupWizardDialog.XamlRoot = this.XamlRoot;
+            }
+            await SetupWizardDialog.ShowAsync();
+        }
+
+        private void SetupWizardDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        {
+            if (_currentWizardStep < 4)
+            {
+                args.Cancel = true; // prevent closing
+                _currentWizardStep++;
+                UpdateWizardUi();
+            }
+            else
+            {
+                // Finish button clicked
+                ClientIdBox.Text = WizardClientIdBox.Text;
+                ClientSecretBox.Password = WizardClientSecretBox.Password;
+                OpenPortal_Click(this, new RoutedEventArgs());
+            }
+        }
+
+        private void SetupWizardDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        {
+            if (_currentWizardStep > 1)
+            {
+                args.Cancel = true; // prevent closing
+                _currentWizardStep--;
+                UpdateWizardUi();
+            }
+        }
+
+        private void UpdateWizardUi()
+        {
+            WizardStep1.Visibility = Visibility.Collapsed;
+            WizardStep2.Visibility = Visibility.Collapsed;
+            WizardStep3.Visibility = Visibility.Collapsed;
+            WizardStep4.Visibility = Visibility.Collapsed;
+
+            if (_currentWizardStep == 1) WizardStep1.Visibility = Visibility.Visible;
+            else if (_currentWizardStep == 2) WizardStep2.Visibility = Visibility.Visible;
+            else if (_currentWizardStep == 3) WizardStep3.Visibility = Visibility.Visible;
+            else if (_currentWizardStep == 4) WizardStep4.Visibility = Visibility.Visible;
+
+            SetupWizardDialog.SecondaryButtonText = _currentWizardStep == 1 ? "" : "Back";
+            SetupWizardDialog.PrimaryButtonText = _currentWizardStep == 4 ? "Finish" : "Next";
+        }
+
+        private void ThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (ThemeComboBox.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            {
+                ElementTheme theme = ElementTheme.Default;
+                if (tag == "Light") theme = ElementTheme.Light;
+                if (tag == "Dark") theme = ElementTheme.Dark;
+                
+                MainWindow.Instance?.SetTheme(theme);
+            }
+        }
+
+        private async void ConnectTts_Click(object sender, RoutedEventArgs e)
+        {
+            string ttsUrl = TtsServerBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(ttsUrl)) return;
+
+            SaveTtsUrl(ttsUrl);
+
+            ConnectTtsBtn.IsEnabled = false;
+            TtsServerBox.IsEnabled = false;
+            DisconnectTtsBtn.IsEnabled = true;
+
+            await JakeyTtsClient.Instance.StartAsync(ttsUrl);
+        }
+
+        private async void DisconnectTts_Click(object sender, RoutedEventArgs e)
+        {
+            ConnectTtsBtn.IsEnabled = true;
+            TtsServerBox.IsEnabled = true;
+            DisconnectTtsBtn.IsEnabled = false;
+
+            await JakeyTtsClient.Instance.StopAsync();
+            MainWindow.Instance?.Log("🛑 Core connection pipeline closed manually.");
+        }
+
+        private void SaveTtsUrl(string ttsUrl)
+        {
+            try
+            {
+                string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
+                string clientId = "", token = "", clientSecret = "", refreshToken = "", customTemplate = "";
+
+                if (File.Exists(credentialsPath))
+                {
+                    string rawJson = File.ReadAllText(credentialsPath);
+                    using var doc = JsonDocument.Parse(rawJson);
+                    var root = doc.RootElement;
+                    clientId = root.TryGetProperty("ClientId", out var ci) ? ci.GetString() ?? "" : "";
+                    clientSecret = root.TryGetProperty("ClientSecret", out var cs) ? cs.GetString() ?? "" : "";
+                    token = root.TryGetProperty("AccessToken", out var at) ? at.GetString() ?? "" : "";
+                    refreshToken = root.TryGetProperty("RefreshToken", out var rt) ? rt.GetString() ?? "" : "";
+                    customTemplate = root.TryGetProperty("CustomTtsTemplate", out var ct) ? ct.GetString() ?? "" : "";
+                }
+
+                var updatedBackup = new
+                {
+                    ClientId = clientId,
+                    ClientSecret = clientSecret,
+                    AccessToken = token,
+                    RefreshToken = refreshToken,
+                    TtsUrl = ttsUrl,
+                    CustomTtsTemplate = customTemplate
+                };
+
+                File.WriteAllText(credentialsPath, JsonSerializer.Serialize(updatedBackup, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch { }
+        }
+
+        public void TriggerLogin(bool forceNewLogin = false)
+        {
+            if (_oauthListener != null && _oauthListener.IsListening) return;
+            // Optionally clear existing tokens to force a fresh login
+            if (forceNewLogin)
+            {
+                StashTokenBox.Text = "";
+            }
+            OpenPortal_Click(this, new RoutedEventArgs());
+        }
+
+        private void ChangeAccount_Click(object sender, RoutedEventArgs e)
+        {
+            TriggerLogin(forceNewLogin: true);
         }
 
         private async void OpenPortal_Click(object sender, RoutedEventArgs e)
@@ -63,6 +222,7 @@ namespace DiapStash_Plugin
             }
 
             AuthBtn.IsEnabled = false;
+            ChangeAccountBtn.IsEnabled = false;
             MainWindow.Instance?.Log("🌐 Initializing loopback server on http://localhost:8888/ ...");
 
             try
@@ -73,7 +233,8 @@ namespace DiapStash_Plugin
 
                 string redirectUri = Uri.EscapeDataString("http://localhost:8888/");
                 string scope = Uri.EscapeDataString("cloud-sync.stock cloud-sync.history cloud-sync.types offline_access");
-                string loginUrl = $"https://account.diapstash.com/oidc/auth?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope={scope}";
+                // Added prompt=login to force account selection if needed
+                string loginUrl = $"https://account.diapstash.com/oidc/auth?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope={scope}&prompt=login";
 
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(loginUrl) { UseShellExecute = true });
 
@@ -98,7 +259,33 @@ namespace DiapStash_Plugin
                 if (!string.IsNullOrEmpty(error))
                 {
                     MainWindow.Instance?.Log($"❌ DiapStash Server rejected authorization request: {error}");
-                    byte[] htmlError = Encoding.UTF8.GetBytes($"<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;color:red;'><h2>❌ Authentication Failed</h2><p>Reason: {error}</p></body></html>");
+                    
+                    string errorHtml = @"
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Authentication Failed</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #ffffff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background-color: #1e1e1e; border: 1px solid #ff4d4d; border-radius: 12px; padding: 40px; text-align: center; box-shadow: 0 8px 32px rgba(255, 77, 77, 0.2); max-width: 500px; }
+        .icon { width: 80px; height: 80px; margin-bottom: 20px; border-radius: 16px; }
+        h2 { color: #ff4d4d; margin-top: 0; font-size: 24px; }
+        p { color: #a0a0a0; font-size: 15px; line-height: 1.5; margin-bottom: 0; }
+        .error-reason { color: #ffb3b3; font-family: monospace; background: rgba(255, 77, 77, 0.1); padding: 10px; border-radius: 6px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class='card'>
+        <img class='icon' src='https://raw.githubusercontent.com/abdldavid/DiapStash-Plugin/master/Assets/StoreLogo.png' alt='App Icon'>
+        <h2>Authentication Failed</h2>
+        <p>The authorization request was rejected or cancelled.</p>
+        <div class='error-reason'>" + WebUtility.HtmlEncode(error) + @"</div>
+    </div>
+</body>
+</html>";
+                    byte[] htmlError = Encoding.UTF8.GetBytes(errorHtml);
                     context.Response.OutputStream.Write(htmlError, 0, htmlError.Length);
                     context.Response.Close();
                     return;
@@ -106,7 +293,32 @@ namespace DiapStash_Plugin
 
                 string code = context.Request.QueryString["code"] ?? "";
 
-                byte[] htmlFeedback = Encoding.UTF8.GetBytes("<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>✓ Link Successful!</h2><p>You can close this tab safely and return to the Application panel layout.</p></body></html>");
+                string successHtml = @"
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Link Successful</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #ffffff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background-color: #1e1e1e; border: 1px solid #00BFFF; border-radius: 12px; padding: 40px; text-align: center; box-shadow: 0 8px 32px rgba(0, 191, 255, 0.15); max-width: 500px; }
+        .icon { width: 80px; height: 80px; margin-bottom: 20px; border-radius: 16px; }
+        h2 { color: #00BFFF; margin-top: 0; font-size: 28px; font-weight: 600; }
+        p { color: #a0a0a0; font-size: 16px; line-height: 1.5; margin-bottom: 25px; }
+        .btn { background-color: #00BFFF; color: #000; border: none; padding: 10px 24px; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class='card'>
+        <img class='icon' src='https://raw.githubusercontent.com/abdldavid/DiapStash-Plugin/master/Assets/StoreLogo.png' alt='App Icon'>
+        <h2>Authentication Successful</h2>
+        <p>You have successfully linked your DiapStash account with the JakeyTTS plugin. You can now close this window safely.</p>
+        <button class='btn' onclick='window.close()'>Close Window</button>
+    </div>
+</body>
+</html>";
+                byte[] htmlFeedback = Encoding.UTF8.GetBytes(successHtml);
                 context.Response.OutputStream.Write(htmlFeedback, 0, htmlFeedback.Length);
 
                 await context.Response.OutputStream.FlushAsync();
@@ -131,6 +343,7 @@ namespace DiapStash_Plugin
             {
                 ShutdownServer();
                 AuthBtn.IsEnabled = true;
+                ChangeAccountBtn.IsEnabled = true;
             }
         }
 
@@ -173,7 +386,6 @@ namespace DiapStash_Plugin
 
                     DiapStashClient.Instance.ConfigureAuthentication(accessToken, clientId);
 
-                    // FIXED: Persist credential sets securely directly onto local disk
                     try
                     {
                         string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");

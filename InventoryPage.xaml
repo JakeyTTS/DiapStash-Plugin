@@ -25,8 +25,18 @@
                           OnContent="Active Stock" 
                           OffContent="Show All Registry"/>
 
-            <Button x:Name="RefreshBtn" Content="Refresh Catalog" Click="RefreshStock_Click" Margin="25,0,0,0"/>
-            <Button x:Name="InspectBtn" Content="🔍 Inspect Raw JSON" Click="InspectRawStock_Click" Margin="10,0,0,0" Style="{StaticResource AccentButtonStyle}"/>
+            <Button x:Name="RefreshBtn" Click="RefreshStock_Click" Margin="25,0,0,0">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE72C;" FontSize="14" />
+                    <TextBlock Text="Refresh Catalog" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="InspectBtn" Click="InspectRawStock_Click" Margin="10,0,0,0" Style="{StaticResource AccentButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE1A3;" FontSize="14" />
+                    <TextBlock Text="Inspect Raw JSON" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
         </StackPanel>
 
         <Grid Grid.Row="1">

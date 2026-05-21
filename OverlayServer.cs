@@ -17,6 +17,8 @@ namespace DiapStash_Plugin
         // Propiedades de diseño
         public double CardW { get; set; } = 800; public double CardH { get; set; } = 200;
         public int TransitionType { get; set; } = 0; public double TransitionDurationMs { get; set; } = 400;
+        public double StayOnScreenDurationMs { get; set; } = 5000;
+        public double CardCornerRadius { get; set; } = 12;
         public string CardBackgroundHex { get; set; } = "#FFFFFF";
         public bool ForcePreviewTrigger { get; set; } = false;
         public bool IsEditing { get; set; } = false;
@@ -78,6 +80,8 @@ namespace DiapStash_Plugin
                             cardH = CardH,
                             transType = TransitionType,
                             transDur = TransitionDurationMs,
+                            stayDur = StayOnScreenDurationMs,
+                            cardRadius = CardCornerRadius,
                             bgHex = CardBackgroundHex,
                             
                             liveProductName = LiveProductName,
@@ -111,8 +115,8 @@ namespace DiapStash_Plugin
         <style>
             body { background: transparent; overflow: hidden; margin: 0; font-family: 'Outfit', 'Segoe UI', sans-serif; }
             #wrapper { position: absolute; left: 50%; top: 50%; width: var(--cardW); height: var(--cardH); transform: translate(-50%, -50%) scale(var(--scale)); display: flex; align-items: center; justify-content: center; }
-            :root { --dur: 0.4s; --cardW: 800px; --cardH: 200px; --scale: 1; }
-            .canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(18, 18, 20, 0.65); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); overflow: hidden; color: white; transition: all var(--dur) cubic-bezier(0.25, 1, 0.5, 1); opacity: 0; }
+            :root { --dur: 0.4s; --cardW: 800px; --cardH: 200px; --cardRadius: 12px; --scale: 1; }
+            .canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(18, 18, 20, 0.65); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: var(--cardRadius); box-shadow: 0 8px 32px rgba(0,0,0,0.4); overflow: hidden; color: white; transition: all var(--dur) cubic-bezier(0.25, 1, 0.5, 1); opacity: 0; }
             .canvas.trans-0 { opacity: 0; } .canvas.trans-0.active { opacity: 1; }
             .canvas.trans-1 { opacity: 0; transform: scale(0.85); } .canvas.trans-1.active { opacity: 1; transform: scale(1); }
             .canvas.trans-2 { opacity: 0; transform: translateX(100px); } .canvas.trans-2.active { opacity: 1; transform: translateX(0); }
@@ -146,6 +150,7 @@ namespace DiapStash_Plugin
                         const d = await (await fetch('/overlay/config?t='+Date.now())).json();
                         document.documentElement.style.setProperty('--cardW', d.cardW + 'px');
                         document.documentElement.style.setProperty('--cardH', d.cardH + 'px');
+                        document.documentElement.style.setProperty('--cardRadius', d.cardRadius + 'px');
                         c.style.background = formatCssColor(d.bgHex);
                         const sX = window.innerWidth / d.cardW; const sY = window.innerHeight / d.cardH;
                         document.documentElement.style.setProperty('--scale', Math.min(sX, sY) * 0.95);
@@ -164,7 +169,7 @@ namespace DiapStash_Plugin
                         
                         c.innerHTML = ''; // Limpiar canvas
                         if (d.elements) {
-                            d.elements.sort((a,b) => (a.zIndex !== undefined ? a.zIndex : a.ZIndex) - (b.zIndex !== undefined ? b.zIndex : b.ZIndex)).forEach(el => {
+                            function buildElement(el, parentDom) {
                                 const dom = document.createElement('div');
                                 dom.style.position = 'absolute';
                                 dom.style.left = (el.x !== undefined ? el.x : el.X) + 'px';
@@ -174,7 +179,13 @@ namespace DiapStash_Plugin
                                 dom.style.zIndex = el.zIndex !== undefined ? el.zIndex : el.ZIndex;
                                 
                                 const type = el.elementType || el.$type || el.ElementType;
-                                if (type === 'text') {
+                                if (type === 'group') {
+                                    const children = el.children || el.Children || [];
+                                    children.sort((a,b) => (a.zIndex !== undefined ? a.zIndex : a.ZIndex) - (b.zIndex !== undefined ? b.zIndex : b.ZIndex)).forEach(child => {
+                                        buildElement(child, dom);
+                                    });
+                                }
+                                else if (type === 'text') {
                                     const ds = el.dataSource || el.DataSource;
                                     let txt = el.customText || el.CustomText;
                                     if (ds === 'ProductName') txt = d.liveProductName;
@@ -201,15 +212,16 @@ namespace DiapStash_Plugin
                                     if (ds === 'Wetness') val = d.liveWet;
                                     else if (ds === 'Messiness') val = d.liveMess;
                                     
+                                    const cr = el.cornerRadius !== undefined ? el.cornerRadius : (el.CornerRadius !== undefined ? el.CornerRadius : 6);
                                     dom.style.background = formatCssColor(el.bgColorHex || el.BgColorHex);
-                                    dom.style.borderRadius = '6px';
+                                    dom.style.borderRadius = cr + 'px';
                                     dom.style.overflow = 'hidden';
                                     dom.style.boxShadow = 'inset 0 1px 3px rgba(0,0,0,0.3)';
                                     
                                     const fill = document.createElement('div');
                                     const fillCol = el.fillColorHex || el.FillColorHex;
                                     fill.style.background = formatCssColor(fillCol);
-                                    fill.style.borderRadius = '6px';
+                                    fill.style.borderRadius = cr + 'px';
                                     fill.style.boxShadow = `0 0 10px ${formatCssColor(fillCol)}`;
                                     fill.style.transition = 'width 1s ease, height 1s ease';
                                     
@@ -232,7 +244,8 @@ namespace DiapStash_Plugin
                                     let src = el.customUrl || el.CustomUrl;
                                     if (ds === 'DiapStashImage') src = d.liveImage;
                                     
-                                    dom.style.borderRadius = '12px';
+                                    const cr = el.cornerRadius !== undefined ? el.cornerRadius : (el.CornerRadius !== undefined ? el.CornerRadius : 6);
+                                    dom.style.borderRadius = cr + 'px';
                                     dom.style.border = '1px solid rgba(0,0,0,0.1)';
                                     dom.style.overflow = 'hidden';
                                     dom.style.display = 'flex';
@@ -247,13 +260,15 @@ namespace DiapStash_Plugin
                                         img.style.height = '100%';
                                         const stretch = el.stretch || el.Stretch;
                                         img.style.objectFit = stretch === 'Uniform' ? 'contain' : (stretch === 'UniformToFill' ? 'cover' : 'fill');
+                                        img.style.borderRadius = 'inherit';
                                         dom.appendChild(img);
                                     } else {
                                         dom.innerHTML = `<span style='font-size:24px'>🛒</span>`;
                                     }
                                 }
-                                c.appendChild(dom);
-                            });
+                                parentDom.appendChild(dom);
+                            }
+                            d.elements.sort((a,b) => (a.zIndex !== undefined ? a.zIndex : a.ZIndex) - (b.zIndex !== undefined ? b.zIndex : b.ZIndex)).forEach(el => buildElement(el, c));
                         }
                         
                         if (d.trigger || transChanged) {
@@ -266,7 +281,7 @@ namespace DiapStash_Plugin
                             hideTimeout = setTimeout(() => {
                                 c.classList.remove('active');
                                 isVisible = false;
-                            }, 6000);
+                            }, d.stayDur || 5000);
                         }
                     } catch(e) { console.error('Sync failed', e); }
                 } setInterval(sync, 800);

@@ -43,8 +43,8 @@
                                 <Border CornerRadius="8" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
                                     <Image x:Name="CardProductImage" Stretch="UniformToFill" Source="ms-appx:///Assets/StoreLogo.png" RenderTransformOrigin="0.5,0.5"/>
                                 </Border>
-                                <Border x:Name="CardStatusBadge" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="-5,-5,0,0" Padding="8,4,8,4" CornerRadius="4" Background="MediumOrchid">
-                                    <TextBlock x:Name="CardStatusBadgeText" Text="ACTIVE" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                                <Border x:Name="CardStatusBadge" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="-5,-5,0,0" Padding="8,4,8,4" CornerRadius="4" Background="{ThemeResource SystemAccentColor}">
+                                    <TextBlock x:Name="CardStatusBadgeText" Text="ACTIVE" FontSize="10" FontWeight="Bold" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
                                 </Border>
                             </Grid>
 
@@ -69,24 +69,39 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="4">
-                                        <TextBlock Text="⏳ Placement Target Start Time" Style="{StaticResource CaptionTextBlockStyle}" Opacity="0.6"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="6" Opacity="0.6">
+                                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE121;" FontSize="12" />
+                                            <TextBlock Text="Placement Target Start Time" Style="{StaticResource CaptionTextBlockStyle}" />
+                                        </StackPanel>
                                         <TextBlock x:Name="CardStartTimeDisplay" Text="--/--/---- --:--" FontSize="13" FontWeight="Medium"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Spacing="4">
-                                        <TextBlock Text="📝 Session Activity Note Context" Style="{StaticResource CaptionTextBlockStyle}" Opacity="0.6"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="6" Opacity="0.6">
+                                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE70F;" FontSize="12" />
+                                            <TextBlock Text="Session Activity Note Context" Style="{StaticResource CaptionTextBlockStyle}" />
+                                        </StackPanel>
                                         <TextBlock x:Name="CardNotesDisplay" Text="No session context log entries attached." FontSize="13" FontStyle="Italic" TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </Grid>
 
                                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,10,0,0">
-                                    <Border x:Name="BadgeLeak" Visibility="Collapsed" Padding="8,4,8,4" Background="OrangeRed" CornerRadius="4">
-                                        <TextBlock Text="⚠️ LEAK DETECTED" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                                    <Border x:Name="BadgeLeak" Visibility="Collapsed" Padding="8,4,8,4" Background="{ThemeResource SystemFillColorCriticalBrush}" CornerRadius="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE7BA;" FontSize="10" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                            <TextBlock Text="LEAK DETECTED" FontSize="10" FontWeight="Bold" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </StackPanel>
                                     </Border>
-                                    <Border x:Name="BadgeWet" Visibility="Collapsed" Padding="8,4,8,4" Background="DodgerBlue" CornerRadius="4">
-                                        <TextBlock x:Name="BadgeWetText" Text="💧 WET (0/5)" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                                    <Border x:Name="BadgeWet" Visibility="Collapsed" Padding="8,4,8,4" Background="{ThemeResource SystemFillColorCautionBrush}" CornerRadius="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE4C6;" FontSize="10" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                            <TextBlock x:Name="BadgeWetText" Text="WET (0/5)" FontSize="10" FontWeight="Bold" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </StackPanel>
                                     </Border>
-                                    <Border x:Name="BadgeMessy" Visibility="Collapsed" Padding="8,4,8,4" Background="SaddleBrown" CornerRadius="4">
-                                        <TextBlock x:Name="BadgeMessyText" Text="💩 MESSY (0/3)" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                                    <Border x:Name="BadgeMessy" Visibility="Collapsed" Padding="8,4,8,4" Background="{ThemeResource SystemFillColorAttentionBrush}" CornerRadius="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE7BA;" FontSize="10" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                            <TextBlock x:Name="BadgeMessyText" Text="MESSY (0/3)" FontSize="10" FontWeight="Bold" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </StackPanel>
                                     </Border>
                                 </StackPanel>
                             </StackPanel>
@@ -110,10 +125,18 @@
                     <StackPanel Spacing="15">
                         <Grid>
                             <StackPanel Spacing="2">
-                                <TextBlock Text="🎛️ Conditional Rule Injector Matrix" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE71C;" FontSize="15" />
+                                    <TextBlock Text="Conditional Rule Injector Matrix" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"/>
+                                </StackPanel>
                                 <TextBlock Text="Create complex conditional trees (IF / AND / ELSE IF) inside isolated card blocks. Click on the block headers to edit their identifier tag string." FontSize="12" Opacity="0.6"/>
                             </StackPanel>
-                            <Button Content="➕ Add New Rule Block Card" Click="AddRule_Click" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource AccentButtonStyle}"/>
+                            <Button Click="AddRule_Click" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource AccentButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE710;" FontSize="12" />
+                                    <TextBlock Text="Add New Rule Block Card" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                         </Grid>
 
                         <ItemsControl x:Name="RulesListView">
@@ -136,8 +159,18 @@
                                                 </StackPanel>
 
                                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                                                    <Button Content="➕ Add Line Clause" Click="AddClause_Click" Style="{StaticResource DefaultButtonStyle}" FontSize="12"/>
-                                                    <Button Content="🗑️ Delete Block" Click="DeleteCard_Click" Foreground="OrangeRed" Background="Transparent" BorderThickness="0" FontSize="12"/>
+                                                    <Button Click="AddClause_Click" Style="{StaticResource DefaultButtonStyle}" FontSize="12">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE710;" FontSize="10" />
+                                                            <TextBlock Text="Add Line Clause" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                    <Button Click="DeleteCard_Click" Foreground="{ThemeResource SystemFillColorCriticalBrush}" Background="Transparent" BorderThickness="0" FontSize="12">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE74D;" FontSize="10" />
+                                                            <TextBlock Text="Delete Block" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </Button>
                                                 </StackPanel>
                                             </Grid>
 
@@ -202,9 +235,15 @@
                                                                      Visibility="{Binding IsLastInLogicalBlock, Converter={StaticResource BoolToVis}}"/>
 
                                                             <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2">
-                                                                <Button Content="🔼" Click="MoveClauseUp_Click" Background="Transparent" BorderThickness="0" Padding="4,4,4,4" FontSize="11" ToolTipService.ToolTip="Move Clause Up"/>
-                                                                <Button Content="🔽" Click="MoveClauseDown_Click" Background="Transparent" BorderThickness="0" Padding="4,4,4,4" FontSize="11" ToolTipService.ToolTip="Move Clause Down"/>
-                                                                <Button Content="✕" Click="DeleteClause_Click" Foreground="OrangeRed" Background="Transparent" BorderThickness="0" FontWeight="Bold" Padding="6,4,6,4"/>
+                                                                <Button Click="MoveClauseUp_Click" Background="Transparent" BorderThickness="0" Padding="4" ToolTipService.ToolTip="Move Clause Up">
+                                                                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE70E;" FontSize="10"/>
+                                                                </Button>
+                                                                <Button Click="MoveClauseDown_Click" Background="Transparent" BorderThickness="0" Padding="4" ToolTipService.ToolTip="Move Clause Down">
+                                                                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE70D;" FontSize="10"/>
+                                                                </Button>
+                                                                <Button Click="DeleteClause_Click" Foreground="{ThemeResource SystemFillColorCriticalBrush}" Background="Transparent" BorderThickness="0" Padding="6,4,6,4">
+                                                                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE711;" FontSize="10"/>
+                                                                </Button>
                                                             </StackPanel>
                                                         </Grid>
                                                     </DataTemplate>
@@ -223,8 +262,18 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" Content="💾 Save Rules Matrix Hierarchy" Click="SaveRules_Click" Style="{StaticResource AccentButtonStyle}" Width="240"/>
-                            <Button Grid.Column="2" Content="🔍 Inspect Raw JSON" Click="InspectRawChange_Click" Style="{StaticResource DefaultButtonStyle}"/>
+                            <Button Grid.Column="0" Click="SaveRules_Click" Style="{StaticResource AccentButtonStyle}" Width="240">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE74E;" FontSize="14" />
+                                                            <TextBlock Text="Save Rules Matrix Hierarchy" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                            </Button>
+                            <Button Grid.Column="2" Click="InspectRawChange_Click" Style="{StaticResource DefaultButtonStyle}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE1A3;" FontSize="14" />
+                                                            <TextBlock Text="Inspect Raw JSON" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                            </Button>
                         </Grid>
                     </StackPanel>
 

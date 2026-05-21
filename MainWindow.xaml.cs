@@ -9,13 +9,15 @@ namespace DiapStash_Plugin
 {
     public sealed partial class MainWindow : Window
     {
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
         public static MainWindow? Instance { get; private set; }
 
         private readonly UserControl _homePage = new HomePage();
-        private readonly UserControl _portalPage = new PortalPage();
+        private readonly SettingsPage _settingsPage = new SettingsPage();
         private readonly InventoryPage _inventoryPage = new InventoryPage();
         private readonly ChangeTrackerPage _changeTrackerPage = new ChangeTrackerPage();
-        private readonly UserControl _injectionsPage = new InjectionsPage();
         private readonly UserControl _streamingPage = new StreamingPage();
 
         public MainWindow()
@@ -48,10 +50,16 @@ namespace DiapStash_Plugin
             this.Activate();
         }
 
-        public UserControl GetPortalPageInstance() => _portalPage;
+        public SettingsPage GetSettingsPageInstance() => _settingsPage;
 
         private void NavView_ItemInvokedHandler(NavigationView sender, NavigationViewItemInvokedEventArgs args)
         {
+            if (args.IsSettingsInvoked)
+            {
+                HandleNavigation("Settings");
+                return;
+            }
+
             var item = args.InvokedItemContainer as NavigationViewItem;
             if (item?.Tag != null) HandleNavigation(item.Tag.ToString());
         }
@@ -77,10 +85,9 @@ namespace DiapStash_Plugin
             switch (pageTag)
             {
                 case "Home": MainContentFrame.Content = _homePage; break;
-                case "StashAuth": MainContentFrame.Content = _portalPage; break;
+                case "Settings": MainContentFrame.Content = _settingsPage; break;
                 case "Inventory": MainContentFrame.Content = _inventoryPage; _ = _inventoryPage.RefreshStockAsync(); break;
                 case "ChangeTracker": MainContentFrame.Content = _changeTrackerPage; _ = _changeTrackerPage.RefreshChangeAsync(); break;
-                case "Injections": MainContentFrame.Content = _injectionsPage; break;
                 case "Streaming": MainContentFrame.Content = _streamingPage; break;
             }
         }
@@ -88,12 +95,25 @@ namespace DiapStash_Plugin
         public void Log(string message) { if (_homePage is HomePage home) home.AppendLog(message); }
         private void OnLogReceived(string message) => Log(message);
 
+        public void SetTheme(ElementTheme theme)
+        {
+            if (this.Content is FrameworkElement fe)
+            {
+                fe.RequestedTheme = theme;
+            }
+
+            bool isDark = theme == ElementTheme.Dark || (theme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
+            int isDarkMode = isDark ? 1 : 0;
+            IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref isDarkMode, sizeof(int));
+        }
+
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
             NavView.ItemInvoked -= NavView_ItemInvokedHandler;
             JakeyTtsClient.Instance.LogReceived -= OnLogReceived;
             Task.Run(async () => { try { await JakeyTtsClient.Instance.StopAsync(); } catch { } });
-            (_portalPage as PortalPage)?.ShutdownServer();
+            _settingsPage?.ShutdownServer();
         }
     }
 }

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- MainWindow -->
+  <data name="NavHome.Content" xml:space="preserve">
+    <value>Home</value>
+  </data>
+  <data name="NavInventory.Content" xml:space="preserve">
+    <value>Inventory</value>
+  </data>
+  <data name="NavChangeLog.Content" xml:space="preserve">
+    <value>Change Log Stream</value>
+  </data>
+  <data name="NavStreaming.Content" xml:space="preserve">
+    <value>Streaming Overlay</value>
+  </data>
+
+  <!-- HomePage -->
+  <data name="HomeTitle.Text" xml:space="preserve">
+    <value>DiapStash Automation Hub</value>
+  </data>
+  <data name="BtnOpenSettings.Content" xml:space="preserve">
+    <value>⚙️ Open Settings</value>
+  </data>
+  <data name="BtnExecuteLogin.Content" xml:space="preserve">
+    <value>🔐 Execute Portal Login</value>
+  </data>
+  <data name="BtnSwitchAccount.Content" xml:space="preserve">
+    <value>Switch Account</value>
+  </data>
+  <data name="BtnViewLogs.Content" xml:space="preserve">
+    <value>📋 View Telemetry Logs</value>
+  </data>
+
+  <!-- SettingsPage -->
+  <data name="SettingsTitle.Text" xml:space="preserve">
+    <value>Application Settings</value>
+  </data>
+  <data name="SettingsAppearanceSubtitle.Text" xml:space="preserve">
+    <value>Appearance</value>
+  </data>
+  <data name="ThemeComboBox.Header" xml:space="preserve">
+    <value>Application Theme</value>
+  </data>
+  <data name="ThemeItemDefault.Content" xml:space="preserve">
+    <value>System Default</value>
+  </data>
+  <data name="ThemeItemLight.Content" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="ThemeItemDark.Content" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  <data name="SettingsJakeyTtsSubtitle.Text" xml:space="preserve">
+    <value>JakeyTTS Bridge Configuration</value>
+  </data>
+  <data name="TtsServerBox.Header" xml:space="preserve">
+    <value>Core WebSocket Server Endpoint Address</value>
+  </data>
+  <data name="BtnStartLoop.Content" xml:space="preserve">
+    <value>Start Loop Automation</value>
+  </data>
+  <data name="BtnStopSync.Content" xml:space="preserve">
+    <value>Stop Sync</value>
+  </data>
+  <data name="SettingsDiapStashSubtitle.Text" xml:space="preserve">
+    <value>DiapStash OAuth2 Secure Authentication</value>
+  </data>
+  <data name="SettingsDiapStashDesc.Text" xml:space="preserve">
+    <value>Authorize this application plugin to communicate with your secure cloud profile datasets safely.</value>
+  </data>
+  <data name="BtnLaunchSetupWizard.Content" xml:space="preserve">
+    <value>Launch Interactive Setup Wizard</value>
+  </data>
+
+  <!-- Setup Wizard Dialog -->
+  <data name="SetupWizardDialog.Title" xml:space="preserve">
+    <value>Setup Wizard</value>
+  </data>
+  <data name="WizardStep1Title.Text" xml:space="preserve">
+    <value>Step 1: Open Developer Panel Portal</value>
+  </data>
+  <data name="WizardStep2Title.Text" xml:space="preserve">
+    <value>Step 2: Complete the Creation Form Parameters</value>
+  </data>
+  <data name="WizardStep3Title.Text" xml:space="preserve">
+    <value>Step 3: Select Scope Clearances Permissions</value>
+  </data>
+  <data name="WizardStep4Title.Text" xml:space="preserve">
+    <value>Step 4: Execute Application Link Authorization</value>
+  </data>
+
+</root>

@@ -78,6 +78,7 @@ namespace DiapStash_Plugin
             catch { }
         }
 
+        [System.Diagnostics.DebuggerNonUserCode]
         public async Task StartAsync(string bridgeUrl)
         {
             await _connectionLock.WaitAsync();
@@ -165,6 +166,7 @@ namespace DiapStash_Plugin
             _webSocket = null;
         }
 
+        [System.Diagnostics.DebuggerNonUserCode]
         private void HandleAutomaticRecovery(string bridgeUrl)
         {
             if (_isReconnecting) return;

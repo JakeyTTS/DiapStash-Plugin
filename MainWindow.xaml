@@ -13,12 +13,18 @@
     <Grid>
         <NavigationView x:Name="NavView" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" Background="Transparent">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Home" Tag="Home" Icon="Home"/>
-                <NavigationViewItem Content="Inventory" Tag="Inventory" Icon="AllApps"/>
-                <NavigationViewItem Content="Change Log Stream" Tag="ChangeTracker" Icon="PostUpdate"/>
-                <NavigationViewItem Icon="Video" Content="Streaming Overlay" Tag="Streaming" />
-                <NavigationViewItem Content="DiapStash Portal" Tag="StashAuth" Icon="Contact"/>
-                <NavigationViewItem Content="JakeyTTS Injections" Tag="Injections" Icon="Share"/>
+                <NavigationViewItem x:Uid="NavHome" Tag="Home" Icon="Home"/>
+                <NavigationViewItem x:Uid="NavInventory" Tag="Inventory">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7B8;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Uid="NavChangeLog" Tag="ChangeTracker">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE81C;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Uid="NavStreaming" Icon="Video" Tag="Streaming" />
             </NavigationView.MenuItems>
 
             <ContentPresenter x:Name="MainContentFrame" Padding="25"/>

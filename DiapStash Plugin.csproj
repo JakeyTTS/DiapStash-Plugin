@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
@@ -30,10 +30,9 @@
 	<ItemGroup>
 		<None Remove="ChangeTrackerPage.xaml" />
 		<None Remove="HomePage.xaml" />
-		<None Remove="InjectionsPage.xaml" />
+		<None Remove="SettingsPage.xaml" />
 		<None Remove="InventoryPage.xaml" />
 		<None Remove="LogWindow.xaml" />
-		<None Remove="PortalPage.xaml" />
 		<None Remove="StreamingPage.xaml" />
 	</ItemGroup>
 
@@ -56,13 +55,10 @@
 		<Page Update="LogWindow.xaml">
 			<Generator>MSBuild:Compile</Generator>
 		</Page>
-		<Page Update="InjectionsPage.xaml">
+		<Page Update="SettingsPage.xaml">
 			<Generator>MSBuild:Compile</Generator>
 		</Page>
 		<Page Update="ChangeTrackerPage.xaml">
-			<Generator>MSBuild:Compile</Generator>
-		</Page>
-		<Page Update="PortalPage.xaml">
 			<Generator>MSBuild:Compile</Generator>
 		</Page>
 		<Page Update="HomePage.xaml">

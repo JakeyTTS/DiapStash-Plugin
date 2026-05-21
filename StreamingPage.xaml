@@ -5,16 +5,36 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     mc:Ignorable="d" d:DesignHeight="800" d:DesignWidth="1200">
 
-    <Grid x:Name="MainRoot" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+    <UserControl.Resources>
+        <MenuFlyout x:Name="CanvasContextMenu">
+            <MenuFlyoutItem Text="Group" Click="GroupBtn_Click">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE7B8;"/>
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem Text="Ungroup" Click="ContextUngroup_Click">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE7CA;"/>
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutSeparator/>
+            <MenuFlyoutItem Text="Delete" Click="DeleteElementBtn_Click">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE74D;"/>
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+        </MenuFlyout>
+    </UserControl.Resources>
+
+    <Grid x:Name="MainRoot">
         <Grid.RowDefinitions>
             <!-- Row 0: Top Header -->
             <RowDefinition Height="Auto"/>
             <!-- Row 1: Workspace Area -->
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-
         <!-- Top Header Layer -->
-        <Grid Grid.Row="0" Padding="30,15" Background="Transparent" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
+        <Grid Grid.Row="0" Padding="30,15">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -25,75 +45,215 @@
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <Button Content="ℹ️ OBS Help" Click="ObsHelpBtn_Click" Padding="15,8"/>
                 <Button Content="ℹ️ JakeyTTS Setup" Click="TtsHelpBtn_Click" Padding="15,8"/>
-                <Button Content="💾 Save Preset" Click="SaveBtn_Click" Padding="15,8"/>
-                <Button Content="🔄 Reset Design" Click="ResetBtn_Click" Padding="15,8"/>
+                <Button Click="UndoBtn_Click" Padding="15,8" ToolTipService.ToolTip="Undo (Ctrl+Z)">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="Z" Modifiers="Control"/>
+                    </Button.KeyboardAccelerators>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE7A7;" FontSize="14"/>
+                        <TextBlock Text="Undo" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="RedoBtn_Click" Padding="15,8" ToolTipService.ToolTip="Redo (Ctrl+Y)">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="Y" Modifiers="Control"/>
+                    </Button.KeyboardAccelerators>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE7A6;" FontSize="14"/>
+                        <TextBlock Text="Redo" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Border Width="1" Background="{ThemeResource SurfaceStrokeColorDefaultBrush}" Margin="5,5"/>
+                <Button Click="SaveBtn_Click" Padding="15,8" ToolTipService.ToolTip="Save Preset">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE74E;" FontSize="14"/>
+                        <TextBlock Text="Save" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="ResetBtn_Click" Padding="15,8" ToolTipService.ToolTip="Reset Design">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE777;" FontSize="14"/>
+                        <TextBlock Text="Reset" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
                 <Button Content="🎬 Canvas Preview" Click="PreviewCanvasBtn_Click" Padding="15,8"/>
                 <Button Content="🚀 Send to OBS" Click="LaunchObsBtn_Click" Style="{StaticResource AccentButtonStyle}" Padding="15,8"/>
             </StackPanel>
         </Grid>
 
         <!-- Workspace Layer -->
-        <Grid Grid.Row="1" x:Name="WorkspaceGrid" PointerWheelChanged="WorkspaceGrid_PointerWheelChanged" PointerPressed="WorkspaceGrid_PointerPressed" PointerMoved="WorkspaceGrid_PointerMoved" PointerReleased="WorkspaceGrid_PointerReleased" Background="Transparent">
-            <!-- Canvas Background Layer -->
-            <Canvas x:Name="BackgroundGridCanvas" SizeChanged="BackgroundGridCanvas_SizeChanged" Opacity="0.5"/>
-            
-            <StackPanel Orientation="Vertical" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Canvas.ZIndex="100">
-                <TextBlock Text="WORKSPACE" Foreground="{ThemeResource TextFillColorDisabledBrush}" HorizontalAlignment="Center" FontSize="24" FontWeight="Bold" CharacterSpacing="200" Margin="0,10,0,0"/>
-            </StackPanel>
+        <Border Grid.Row="1" Margin="20,0,20,20" CornerRadius="12" Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
+            <Grid x:Name="WorkspaceGrid" PointerWheelChanged="WorkspaceGrid_PointerWheelChanged" PointerPressed="WorkspaceGrid_PointerPressed" PointerMoved="WorkspaceGrid_PointerMoved" PointerReleased="WorkspaceGrid_PointerReleased" Background="Transparent">
+                <!-- Canvas Background Layer -->
+                <Canvas x:Name="BackgroundGridCanvas" SizeChanged="BackgroundGridCanvas_SizeChanged" Opacity="0.5"/>
+                
+                <StackPanel Orientation="Vertical" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Canvas.ZIndex="100">
+                    <TextBlock Text="WORKSPACE" Foreground="{ThemeResource TextFillColorDisabledBrush}" HorizontalAlignment="Center" FontSize="24" FontWeight="Bold" CharacterSpacing="200" Margin="0,10,0,0"/>
+                </StackPanel>
 
-            <!-- Artboard Layer -->
-            <Border x:Name="WidgetArtboard" Width="800" Height="200" VerticalAlignment="Center" HorizontalAlignment="Center" Background="#FFFFFF" CornerRadius="16" BorderBrush="#1A000000" BorderThickness="1" Translation="0,0,32" RenderTransformOrigin="0.5,0.5" Margin="0,60,0,0">
-                <Border.RenderTransform>
-                    <TransformGroup>
-                        <CompositeTransform x:Name="ArtboardTransform"/>
-                        <CompositeTransform x:Name="AnimationTransform"/>
-                    </TransformGroup>
-                </Border.RenderTransform>
-                <Border.Shadow>
-                    <ThemeShadow />
-                </Border.Shadow>
-                <Grid CornerRadius="16">
-                    <Canvas x:Name="EditorCanvas" PointerPressed="EditorCanvas_PointerPressed" Background="Transparent">
-                        
-                        <Grid x:Name="SelectionGroup" Visibility="Collapsed" Canvas.ZIndex="1000">
-                            <Grid.Resources>
-                                <Style TargetType="Thumb">
-                                    <Setter Property="Width" Value="14"/>
-                                    <Setter Property="Height" Value="14"/>
-                                    <Setter Property="Background" Value="#00BFFF"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Thumb">
-                                                <Border Background="{TemplateBinding Background}" CornerRadius="7" BorderBrush="White" BorderThickness="2"/>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Grid.Resources>
-                            <Border x:Name="SelectionBox" BorderBrush="#00BFFF" BorderThickness="2" IsHitTestVisible="False"/>
-                            <Thumb x:Name="ResizeTL" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-7,-7,0,0" DragDelta="ResizeHandle_DragDelta" Tag="TL"/>
-                            <Thumb x:Name="ResizeTC" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-7,0,0" DragDelta="ResizeHandle_DragDelta" Tag="TC"/>
-                            <Thumb x:Name="ResizeTR" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-7,-7,0" DragDelta="ResizeHandle_DragDelta" Tag="TR"/>
-                            <Thumb x:Name="ResizeML" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-7,0,0,0" DragDelta="ResizeHandle_DragDelta" Tag="ML"/>
-                            <Thumb x:Name="ResizeMR" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,-7,0" DragDelta="ResizeHandle_DragDelta" Tag="MR"/>
-                            <Thumb x:Name="ResizeBL" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-7,0,0,-7" DragDelta="ResizeHandle_DragDelta" Tag="BL"/>
-                            <Thumb x:Name="ResizeBC" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-7" DragDelta="ResizeHandle_DragDelta" Tag="BC"/>
-                            <Thumb x:Name="ResizeBR" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-7,-7" DragDelta="ResizeHandle_DragDelta" Tag="BR"/>
-                        </Grid>
-                    </Canvas>
+                <!-- Artboard Layer -->
+                <Border x:Name="WidgetArtboard" Width="800" Height="200" VerticalAlignment="Center" HorizontalAlignment="Center" Background="#FFFFFF" CornerRadius="16" BorderBrush="#1A000000" BorderThickness="1" Translation="0,0,32" RenderTransformOrigin="0.5,0.5" Margin="0,60,0,0">
+                    <Border.RenderTransform>
+                        <TransformGroup>
+                            <CompositeTransform x:Name="ArtboardTransform"/>
+                            <CompositeTransform x:Name="AnimationTransform"/>
+                        </TransformGroup>
+                    </Border.RenderTransform>
+                    <Border.Shadow>
+                        <ThemeShadow />
+                    </Border.Shadow>
+                    <Grid CornerRadius="16">
+                        <Canvas x:Name="EditorCanvas" PointerPressed="EditorCanvas_PointerPressed" PointerMoved="EditorCanvas_PointerMoved" PointerReleased="EditorCanvas_PointerReleased" Background="Transparent">
+                            <Canvas x:Name="GridCanvas" IsHitTestVisible="False" />
+                            <Rectangle x:Name="MarqueeRect" Fill="#400078D7" Stroke="#0078D7" StrokeThickness="1" Visibility="Collapsed" Canvas.ZIndex="9999"/>
+                            
+                            <!-- Snapping Guides -->
+                            <Line x:Name="GuideLineV" Stroke="DodgerBlue" StrokeThickness="1" StrokeDashArray="4,4" Visibility="Collapsed" Canvas.ZIndex="9998"/>
+                            <Line x:Name="GuideLineH" Stroke="DodgerBlue" StrokeThickness="1" StrokeDashArray="4,4" Visibility="Collapsed" Canvas.ZIndex="9998"/>
+                            
+                            <Grid x:Name="SelectionGroup" Visibility="Collapsed" Canvas.ZIndex="1000">
+                                <Grid.Resources>
+                                    <Style TargetType="Thumb">
+                                        <Setter Property="Width" Value="14"/>
+                                        <Setter Property="Height" Value="14"/>
+                                        <Setter Property="Background" Value="#00BFFF"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Thumb">
+                                                    <Border Background="{TemplateBinding Background}" CornerRadius="7" BorderBrush="White" BorderThickness="2"/>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Grid.Resources>
+                                <Border x:Name="SelectionBox" BorderBrush="#00BFFF" BorderThickness="2" IsHitTestVisible="False"/>
+                                <Thumb x:Name="ResizeTL" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-7,-7,0,0" DragStarted="ResizeHandle_DragStarted" DragDelta="ResizeHandle_DragDelta" Tag="TL"/>
+                                <Thumb x:Name="ResizeTC" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-7,0,0" DragStarted="ResizeHandle_DragStarted" DragDelta="ResizeHandle_DragDelta" Tag="TC"/>
+                                <Thumb x:Name="ResizeTR" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-7,-7,0" DragStarted="ResizeHandle_DragStarted" DragDelta="ResizeHandle_DragDelta" Tag="TR"/>
+                                <Thumb x:Name="ResizeML" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-7,0,0,0" DragStarted="ResizeHandle_DragStarted" DragDelta="ResizeHandle_DragDelta" Tag="ML"/>
+                                <Thumb x:Name="ResizeMR" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,-7,0" DragStarted="ResizeHandle_DragStarted" DragDelta="ResizeHandle_DragDelta" Tag="MR"/>
+                                <Thumb x:Name="ResizeBL" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-7,0,0,-7" DragStarted="ResizeHandle_DragStarted" DragDelta="ResizeHandle_DragDelta" Tag="BL"/>
+                                <Thumb x:Name="ResizeBC" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-7" DragStarted="ResizeHandle_DragStarted" DragDelta="ResizeHandle_DragDelta" Tag="BC"/>
+                                <Thumb x:Name="ResizeBR" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-7,-7" DragStarted="ResizeHandle_DragStarted" DragDelta="ResizeHandle_DragDelta" Tag="BR"/>
+                            </Grid>
+                        </Canvas>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+         <!-- Floating Left Panel (Pages & Layers) -->
+        <Border Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="40,20,0,20" Width="300" MaxHeight="680" Background="{ThemeResource AcrylicBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="12" Padding="20">
+            <Border.Shadow>
+                <ThemeShadow />
+            </Border.Shadow>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Designs" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Click="AddPageBtn_Click" Style="{StaticResource AccentButtonStyle}" Padding="8,4" ToolTipService.ToolTip="Create New Design">
+                        <FontIcon Glyph="&#xE710;" FontSize="14"/>
+                    </Button>
                 </Grid>
-            </Border>
-        </Grid>
+                <ListView Grid.Row="1" x:Name="PagesListView" SelectionChanged="PagesListView_SelectionChanged" Background="Transparent" Margin="0,0,0,15" MinHeight="100">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Background="Transparent" Padding="0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Click="InlineRenameDesign_Click" Background="Transparent" BorderThickness="0" Padding="4" Margin="4,0,0,0" ToolTipService.ToolTip="Rename">
+                                    <FontIcon Glyph="&#xE70F;" FontSize="12"/>
+                                </Button>
+                                <Button Grid.Column="2" Click="InlineDeleteDesign_Click" Background="Transparent" BorderThickness="0" Padding="4" Margin="4,0,0,0" ToolTipService.ToolTip="Delete">
+                                    <FontIcon Glyph="&#xE74D;" FontSize="12" Foreground="Red"/>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
 
-        <!-- Floating Left Panel -->
-        <Border Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20,20,0,20" Width="320" MaxHeight="680" Background="{ThemeResource AcrylicBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="12" Padding="20">
+                <Grid Grid.Row="2" Margin="0,0,0,10">
+                    <TextBlock Text="Layers" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                </Grid>
+                <TreeView Grid.Row="3" x:Name="ZOrderTree" Background="Transparent" SelectionMode="Single" ItemInvoked="ZOrderTree_ItemInvoked">
+                    <TreeView.ItemTemplate>
+                        <DataTemplate>
+                            <ContentPresenter Content="{Binding Content}"/>
+                        </DataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </Grid>
+        </Border>
+
+        <!-- Floating Right Panel (Properties) -->
+        <Border Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,20,40,20" Width="320" MaxHeight="680" Background="{ThemeResource AcrylicBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="12" Padding="20">
             <Border.Shadow>
                 <ThemeShadow />
             </Border.Shadow>
             <ScrollViewer>
-                <StackPanel Spacing="15">
+                <StackPanel Spacing="15" Padding="0,0,15,0">
                     <TextBlock Text="Properties" FontWeight="Bold" FontSize="18"/>
                     
+                    <StackPanel x:Name="Properties_Specific" Spacing="15" Visibility="Collapsed">
+                        <TextBox x:Name="ElementNameBox" Header="Element Name" TextChanged="ElementNameBox_TextChanged"/>
+                        
+                        <TextBlock Text="Alignment" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Vertical" Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button x:Name="AlignLeftBtnCard" ToolTipService.ToolTip="Align Left" Click="AlignLeftBtn_Click">
+                                    <Path Data="M120-80q-17 0-28.5-11.5T80-120v-720q0-17 11.5-28.5T120-880q17 0 28.5 11.5T160-840v720q0 17-11.5 28.5T120-80Zm180-200q-25 0-42.5-17.5T240-340q0-25 17.5-42.5T300-400h280q25 0 42.5 17.5T640-340q0 25-17.5 42.5T580-280H300Zm0-280q-25 0-42.5-17.5T240-620q0-25 17.5-42.5T300-680h520q25 0 42.5 17.5T880-620q0 25-17.5 42.5T820-560H300Z" Fill="{ThemeResource TextFillColorPrimaryBrush}" Stretch="Uniform" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button x:Name="AlignCenterHBtn" ToolTipService.ToolTip="Align Center Horizontal" Click="AlignCenterH_Click">
+                                    <Path Data="M440-120v-160H300q-25 0-42.5-17.5T240-340q0-25 17.5-42.5T300-400h140v-160H180q-25 0-42.5-17.5T120-620q0-25 17.5-42.5T180-680h260v-160q0-17 11.5-28.5T480-880q17 0 28.5 11.5T520-840v160h260q25 0 42.5 17.5T840-620q0 25-17.5 42.5T780-560H520v160h140q25 0 42.5 17.5T720-340q0 25-17.5 42.5T660-280H520v160q0 17-11.5 28.5T480-80q-17 0-28.5-11.5T440-120Z" Fill="{ThemeResource TextFillColorPrimaryBrush}" Stretch="Uniform" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button x:Name="AlignRightBtnCard" ToolTipService.ToolTip="Align Right" Click="AlignRightBtn_Click">
+                                    <Path Data="M840-80q-17 0-28.5-11.5T800-120v-720q0-17 11.5-28.5T840-880q17 0 28.5 11.5T880-840v720q0 17-11.5 28.5T840-80ZM380-280q-25 0-42.5-17.5T320-340q0-25 17.5-42.5T380-400h280q25 0 42.5 17.5T720-340q0 25-17.5 42.5T660-280H380ZM140-560q-25 0-42.5-17.5T80-620q0-25 17.5-42.5T140-680h520q25 0 42.5 17.5T720-620q0 25-17.5 42.5T660-560H140Z" Fill="{ThemeResource TextFillColorPrimaryBrush}" Stretch="Uniform" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button x:Name="AlignTopBtn" ToolTipService.ToolTip="Align Top" Click="AlignTopBtn_Click">
+                                    <Path Data="M340-80q-25 0-42.5-17.5T280-140v-520q0-25 17.5-42.5T340-720q25 0 42.5 17.5T400-660v520q0 25-17.5 42.5T340-80Zm280-240q-25 0-42.5-17.5T560-380v-280q0-25 17.5-42.5T620-720q25 0 42.5 17.5T680-660v280q0 25-17.5 42.5T620-320ZM120-800q-17 0-28.5-11.5T80-840q0-17 11.5-28.5T120-880h720q17 0 28.5 11.5T880-840q0 17-11.5 28.5T840-800H120Z" Fill="{ThemeResource TextFillColorPrimaryBrush}" Stretch="Uniform" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button x:Name="AlignCenterVBtn" ToolTipService.ToolTip="Align Center Vertical" Click="AlignCenterV_Click">
+                                    <Path Data="M340-120q-25 0-42.5-17.5T280-180v-260H120q-17 0-28.5-11.5T80-480q0-17 11.5-28.5T120-520h160v-260q0-25 17.5-42.5T340-840q25 0 42.5 17.5T400-780v260h160v-140q0-25 17.5-42.5T620-720q25 0 42.5 17.5T680-660v140h160q17 0 28.5 11.5T880-480q0 17-11.5 28.5T840-440H680v140q0 25-17.5 42.5T620-240q-25 0-42.5-17.5T560-300v-140H400v260q0 25-17.5 42.5T340-120Z" Fill="{ThemeResource TextFillColorPrimaryBrush}" Stretch="Uniform" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button x:Name="AlignBottomBtn" ToolTipService.ToolTip="Align Bottom" Click="AlignBottomBtn_Click">
+                                    <Path Data="M120-80q-17 0-28.5-11.5T80-120q0-17 11.5-28.5T120-160h720q17 0 28.5 11.5T880-120q0 17-11.5 28.5T840-80H120Zm220-160q-25 0-42.5-17.5T280-300v-520q0-25 17.5-42.5T340-880q25 0 42.5 17.5T400-820v520q0 25-17.5 42.5T340-240Zm280 0q-25 0-42.5-17.5T560-300v-280q0-25 17.5-42.5T620-640q25 0 42.5 17.5T680-580v280q0 25-17.5 42.5T620-240Z" Fill="{ThemeResource TextFillColorPrimaryBrush}" Stretch="Uniform" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <StackPanel x:Name="Properties_Specific_CornerRadius">
+                            <TextBlock Text="Corner Radius" Margin="0,0,0,4"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="60"/>
+                                </Grid.ColumnDefinitions>
+                                <Slider Grid.Column="0" x:Name="ElementCornerRadiusSlider" Minimum="0" Maximum="100" Value="0" ValueChanged="ElementCornerRadiusSlider_ValueChanged" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <TextBox Grid.Column="1" x:Name="ElementCornerRadiusBox" Text="0" TextChanged="ElementProp_Changed" VerticalAlignment="Center" TextAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+
                     <StackPanel x:Name="Properties_Global" Spacing="15">
                         <TextBlock Text="Card Dimensions" FontWeight="SemiBold"/>
                         
@@ -121,19 +281,44 @@
                             </Grid>
                         </StackPanel>
 
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Card Corner Radius (px)" FontWeight="SemiBold" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="80"/>
+                                </Grid.ColumnDefinitions>
+                                <Slider Grid.Column="0" x:Name="CardCornerRadiusSlider" Minimum="0" Maximum="100" Value="12" ValueChanged="Control_Changed" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" x:Name="CardCornerRadiusBox" Text="12" TextChanged="CardDimensionBox_TextChanged" VerticalAlignment="Center" TextAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+
                         <TextBlock Text="Card Background"/>
-                        <ColorPicker x:Name="CardBgColorPicker" ColorChanged="Color_Changed"/>
+                        <DropDownButton x:Name="CardBgColorBtn" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                            <DropDownButton.Content>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Border x:Name="CardBgColorPreview" Width="20" Height="20" CornerRadius="4" Background="White" BorderBrush="Gray" BorderThickness="1"/>
+                                    <TextBlock x:Name="CardBgColorHex" Text="#FFFFFF" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DropDownButton.Content>
+                            <DropDownButton.Flyout>
+                                <Flyout>
+                                    <ColorPicker x:Name="CardBgColorPicker" ColorChanged="Color_Changed"/>
+                                </Flyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
                         <TextBlock Text="OBS Animation" FontWeight="SemiBold" Margin="0,10,0,0"/>
                         <ComboBox x:Name="TransitionTypeCombo" Header="Entry FX" SelectionChanged="Control_Changed" HorizontalAlignment="Stretch">
-                            <ComboBoxItem Content="Fade In" IsSelected="True"/>
-                            <ComboBoxItem Content="Zoom In"/>
-                            <ComboBoxItem Content="Slide Left"/>
+                            <ComboBoxItem Content="Fade In"/>
+                            <ComboBoxItem Content="Pop In"/>
                             <ComboBoxItem Content="Slide Right"/>
-                            <ComboBoxItem Content="Slide Top"/>
-                            <ComboBoxItem Content="Slide Bottom"/>
-                            <ComboBoxItem Content="Bounce Pop"/>
+                            <ComboBoxItem Content="Slide Left"/>
+                            <ComboBoxItem Content="Slide Down"/>
+                            <ComboBoxItem Content="Slide Up"/>
+                            <ComboBoxItem Content="Bounce In"/>
                         </ComboBox>
-                        <Slider x:Name="TransitionSpeedSlider" Header="Speed (ms)" Minimum="100" Maximum="1500" Value="400" ValueChanged="Control_Changed"/>
+                        <Slider x:Name="TransitionSpeedSlider" Header="Transition Speed (ms)" Minimum="100" Maximum="1500" Value="400" ValueChanged="Control_Changed"/>
+                        <Slider x:Name="DisplayDurationSlider" Header="Stay On Screen (ms)" Minimum="1000" Maximum="15000" Value="5000" ValueChanged="Control_Changed"/>
                     </StackPanel>
 
                     <StackPanel x:Name="Properties_Text" Spacing="15" Visibility="Collapsed">
@@ -164,10 +349,29 @@
                             <ComboBoxItem Content="Italic"/>
                         </ComboBox>
                         
+                        <TextBlock Text="Text Alignment" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <ToggleButton x:Name="AlignLeftBtn" Content="Left" Click="TextAlign_Click" Tag="Left"/>
+                            <ToggleButton x:Name="AlignCenterBtn" Content="Center" Click="TextAlign_Click" Tag="Center"/>
+                            <ToggleButton x:Name="AlignRightBtn" Content="Right" Click="TextAlign_Click" Tag="Right"/>
+                        </StackPanel>
+                        
                         <Slider x:Name="TextSizeSlider" Header="Font Size" Minimum="12" Maximum="120" ValueChanged="ElementProp_Changed"/>
                         <ToggleSwitch x:Name="TextWrapToggle" Header="Wrap Text" Toggled="ElementProp_Changed"/>
                         <TextBlock Text="Text Color"/>
-                        <ColorPicker x:Name="TextColorPicker" ColorChanged="ElementPropColor_Changed"/>
+                        <DropDownButton x:Name="TextColorBtn" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                            <DropDownButton.Content>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Border x:Name="TextColorPreview" Width="20" Height="20" CornerRadius="4" Background="Black" BorderBrush="Gray" BorderThickness="1"/>
+                                    <TextBlock x:Name="TextColorHex" Text="#1E1E1E" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DropDownButton.Content>
+                            <DropDownButton.Flyout>
+                                <Flyout>
+                                    <ColorPicker x:Name="TextColorPicker" ColorChanged="ElementPropColor_Changed"/>
+                                </Flyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
                     </StackPanel>
 
                     <StackPanel x:Name="Properties_Bar" Spacing="15" Visibility="Collapsed">
@@ -181,9 +385,33 @@
                             <ComboBoxItem Content="Vertical"/>
                         </ComboBox>
                         <TextBlock Text="Fill Color"/>
-                        <ColorPicker x:Name="BarFillColorPicker" ColorChanged="ElementPropColor_Changed"/>
+                        <DropDownButton x:Name="BarFillColorBtn" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                            <DropDownButton.Content>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Border x:Name="BarFillColorPreview" Width="20" Height="20" CornerRadius="4" Background="#0078D7" BorderBrush="Gray" BorderThickness="1"/>
+                                    <TextBlock x:Name="BarFillColorHex" Text="#0078D7" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DropDownButton.Content>
+                            <DropDownButton.Flyout>
+                                <Flyout>
+                                    <ColorPicker x:Name="BarFillColorPicker" ColorChanged="ElementPropColor_Changed"/>
+                                </Flyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
                         <TextBlock Text="Background Color"/>
-                        <ColorPicker x:Name="BarBgColorPicker" ColorChanged="ElementPropColor_Changed"/>
+                        <DropDownButton x:Name="BarBgColorBtn" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                            <DropDownButton.Content>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Border x:Name="BarBgColorPreview" Width="20" Height="20" CornerRadius="4" Background="#E6E6E6" BorderBrush="Gray" BorderThickness="1"/>
+                                    <TextBlock x:Name="BarBgColorHex" Text="#E6E6E6" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DropDownButton.Content>
+                            <DropDownButton.Flyout>
+                                <Flyout>
+                                    <ColorPicker x:Name="BarBgColorPicker" ColorChanged="ElementPropColor_Changed"/>
+                                </Flyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
                     </StackPanel>
 
                     <StackPanel x:Name="Properties_Image" Spacing="15" Visibility="Collapsed">
@@ -199,52 +427,52 @@
                             <ComboBoxItem Content="Fill"/>
                         </ComboBox>
                     </StackPanel>
-
                 </StackPanel>
             </ScrollViewer>
         </Border>
 
-        <!-- Floating Right Panel -->
-        <Border Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,20,20,20" Width="280" MaxHeight="680" Background="{ThemeResource AcrylicBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="12" Padding="20">
+        <!-- Floating Bottom Toolbar -->
+        <Border Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,40" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="20" Padding="15,10">
             <Border.Shadow>
                 <ThemeShadow />
             </Border.Shadow>
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <Grid Grid.Row="0" Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Layer Order" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
-                    <DropDownButton Grid.Column="1" Content="➕ Add" Style="{StaticResource AccentButtonStyle}">
-                        <DropDownButton.Flyout>
-                            <MenuFlyout>
-                                <MenuFlyoutItem Text="📝 Add Text" Click="AddTextBtn_Click"/>
-                                <MenuFlyoutItem Text="📊 Add Bar" Click="AddBarBtn_Click"/>
-                                <MenuFlyoutItem Text="🖼️ Add Image" Click="AddImageBtn_Click"/>
-                            </MenuFlyout>
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-                </Grid>
-                <Grid Grid.Row="1">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <ListView x:Name="ZOrderList" SelectionChanged="ZOrderList_SelectionChanged" Background="Transparent">
-                        <!-- Populated dynamically -->
-                    </ListView>
-                    <StackPanel Grid.Column="1" Spacing="10" VerticalAlignment="Center" Margin="10,0,0,0">
-                        <Button Content="⬆️" Click="BringForwardBtn_Click" ToolTipService.ToolTip="Bring Forward"/>
-                        <Button Content="⬇️" Click="SendBackwardBtn_Click" ToolTipService.ToolTip="Send Backward"/>
-                        <Button Content="🗑️" Click="DeleteElementBtn_Click" ToolTipService.ToolTip="Delete Selected"/>
+            <StackPanel Orientation="Horizontal" Spacing="15">
+                <Button Click="AddTextBtn_Click" Style="{StaticResource AccentButtonStyle}" CornerRadius="10">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8D2;" FontSize="14"/>
+                        <TextBlock Text="Text" VerticalAlignment="Center"/>
                     </StackPanel>
-                </Grid>
-            </Grid>
+                </Button>
+                <Button Click="AddBarBtn_Click" Style="{StaticResource AccentButtonStyle}" CornerRadius="10">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE90B;" FontSize="14"/>
+                        <TextBlock Text="Bar" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="AddImageBtn_Click" Style="{StaticResource AccentButtonStyle}" CornerRadius="10">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xEB9F;" FontSize="14"/>
+                        <TextBlock Text="Image" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <AppBarSeparator />
+                <TextBlock Text="Grid" VerticalAlignment="Center" FontWeight="SemiBold" Margin="5,0,5,0"/>
+                <ToggleSwitch x:Name="SnapGridToggle" IsOn="False" Toggled="SnapGridToggle_Toggled" VerticalAlignment="Center" Margin="0,0,0,0"/>
+                <TextBox x:Name="GridSizeBox" PlaceholderText="Grid px" Text="10" Width="80" TextChanged="Control_Changed" VerticalAlignment="Center"/>
+                <Border Width="1" Background="{ThemeResource SurfaceStrokeColorDefaultBrush}" Margin="5,0"/>
+                <Button Click="GroupBtn_Click" Style="{StaticResource DefaultButtonStyle}" CornerRadius="10" ToolTipService.ToolTip="Group Selected Elements">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE7B8;" FontSize="14"/>
+                        <TextBlock Text="Group" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="DeleteElementBtn_Click" Style="{StaticResource DefaultButtonStyle}" CornerRadius="10">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE74D;" FontSize="14"/>
+                        <TextBlock Text="Delete" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
         </Border>
 
     </Grid>
