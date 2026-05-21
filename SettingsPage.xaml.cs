@@ -278,7 +278,7 @@ namespace DiapStash_Plugin
 </head>
 <body>
     <div class='card'>
-        <img class='icon' src='https://raw.githubusercontent.com/abdldavid/DiapStash-Plugin/master/Assets/StoreLogo.png' alt='App Icon'>
+        <img class='icon' src='https://raw.githubusercontent.com/abdldavid/DiapStash-Plugin/master/Assets/StoreLogo.scale-400.png' alt='App Icon'>
         <h2>Authentication Failed</h2>
         <p>The authorization request was rejected or cancelled.</p>
         <div class='error-reason'>" + WebUtility.HtmlEncode(error) + @"</div>
@@ -311,7 +311,7 @@ namespace DiapStash_Plugin
 </head>
 <body>
     <div class='card'>
-        <img class='icon' src='https://raw.githubusercontent.com/abdldavid/DiapStash-Plugin/master/Assets/StoreLogo.png' alt='App Icon'>
+        <img class='icon' src='https://raw.githubusercontent.com/abdldavid/DiapStash-Plugin/master/Assets/StoreLogo.scale-400.png' alt='App Icon'>
         <h2>Authentication Successful</h2>
         <p>You have successfully linked your DiapStash account with the JakeyTTS plugin. You can now close this window safely.</p>
         <button class='btn' onclick='window.close()'>Close Window</button>

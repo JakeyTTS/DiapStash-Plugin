@@ -9,7 +9,7 @@
     <Grid Margin="12">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="24">
 
-            <Image Source="ms-appx:///Assets/StoreLogo.png" Width="120" Height="120" Stretch="Uniform" HorizontalAlignment="Center"/>
+            <Image Source="ms-appx:///Assets/StoreLogo.scale-400.png" Width="120" Height="120" Stretch="Uniform" HorizontalAlignment="Center"/>
 
             <StackPanel Spacing="6" HorizontalAlignment="Center">
                 <TextBlock x:Uid="HomeTitle" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
