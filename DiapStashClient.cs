@@ -75,7 +75,7 @@ namespace DiapStash_Plugin
             _httpClient = new HttpClient(handler)
             {
                 BaseAddress = new Uri("https://api.diapstash.com/"),
-                Timeout = TimeSpan.FromSeconds(8) // Línea de vida preventiva para evitar cuelgues de UI
+                Timeout = TimeSpan.FromSeconds(8)
             };
         }
 
