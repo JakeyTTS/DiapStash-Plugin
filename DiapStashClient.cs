@@ -395,6 +395,8 @@ namespace DiapStash_Plugin
             catch { return (fallbackName, ""); }
         }
 
+        public DiapStashChangeState? GetCachedChangeState() => _cachedChangeState;
+
         public async Task<DiapStashChangeState?> FetchLatestChangeStateObjectAsync(bool forceRefresh = false)
         {
             if (string.IsNullOrEmpty(_accessToken) || string.IsNullOrEmpty(_clientId)) return null;

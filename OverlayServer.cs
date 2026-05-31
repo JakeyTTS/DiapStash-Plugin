@@ -78,7 +78,7 @@ namespace DiapStash_Plugin
                     {
                         try
                         {
-                            var state = await DiapStashClient.Instance.FetchLatestChangeStateObjectAsync();
+                            var state = DiapStashClient.Instance.GetCachedChangeState();
                             if (state != null)
                             {
                                 LiveProductName = state.ProductName ?? "Standard Diaper Product";
