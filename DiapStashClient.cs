@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -262,6 +262,52 @@ namespace DiapStash_Plugin
             return sb.ToString();
         }
 
+        private string SanitizeImageUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return "";
+            if (url.Contains("format=webp", StringComparison.OrdinalIgnoreCase))
+            {
+                url = url.Replace("format=webp", "format=png", StringComparison.OrdinalIgnoreCase);
+            }
+            return url;
+        }
+
+        private string ExtractImageUrl(JsonElement element)
+        {
+            string[] imageFields = { "primaryImage", "frontImage", "backImage", "image", "thumbnail" };
+            foreach (var field in imageFields)
+            {
+                if (element.TryGetProperty(field, out var imgObj))
+                {
+                    if (imgObj.ValueKind == JsonValueKind.Object && imgObj.TryGetProperty("url", out var urlProp))
+                    {
+                        string url = urlProp.GetString() ?? "";
+                        if (!string.IsNullOrEmpty(url)) return SanitizeImageUrl(url);
+                    }
+                    else if (imgObj.ValueKind == JsonValueKind.String)
+                    {
+                        string url = imgObj.GetString() ?? "";
+                        if (!string.IsNullOrEmpty(url)) return SanitizeImageUrl(url);
+                    }
+                }
+            }
+            
+            if (element.TryGetProperty("images", out var imagesArray) && imagesArray.ValueKind == JsonValueKind.Array && imagesArray.GetArrayLength() > 0)
+            {
+                var firstImage = imagesArray[0];
+                if (firstImage.ValueKind == JsonValueKind.Object && firstImage.TryGetProperty("url", out var urlProp))
+                {
+                    return SanitizeImageUrl(urlProp.GetString() ?? "");
+                }
+                else if (firstImage.ValueKind == JsonValueKind.String)
+                {
+                    return SanitizeImageUrl(firstImage.GetString() ?? "");
+                }
+            }
+            
+            return "";
+        }
+
         public async Task<(string FullName, string ImageUrl)> FetchDiaperTypeMetadataAsync(int typeId, string targetVariantId)
         {
             string fallbackName = $"Variant #{typeId}";
@@ -304,7 +350,7 @@ namespace DiapStash_Plugin
                 string modelName = typeNode.TryGetProperty("name", out var mProp) ? mProp.GetString() ?? "Standard Product" : "Standard Product";
 
                 string fullProductName = string.IsNullOrEmpty(brand) ? modelName : $"{brand} {modelName}";
-                string remoteCdnImageUrl = "";
+                string remoteCdnImageUrl = ExtractImageUrl(typeNode);
 
                 if (typeNode.TryGetProperty("variants", out var variantsArray) && variantsArray.ValueKind == JsonValueKind.Array)
                 {
@@ -317,13 +363,19 @@ namespace DiapStash_Plugin
                             string colorName = variant.TryGetProperty("name", out var cProp) ? cProp.GetString() ?? "" : "";
                             if (!string.IsNullOrEmpty(colorName)) fullProductName += $" ({colorName})";
 
-                            if (variant.TryGetProperty("primaryImage", out var imgObj) && imgObj.ValueKind == JsonValueKind.Object)
+                            string variantImageUrl = ExtractImageUrl(variant);
+                            if (!string.IsNullOrEmpty(variantImageUrl))
                             {
-                                if (imgObj.TryGetProperty("url", out var urlProp)) remoteCdnImageUrl = urlProp.GetString() ?? "";
+                                remoteCdnImageUrl = variantImageUrl;
                             }
                             break;
                         }
                     }
+                }
+
+                if (string.IsNullOrEmpty(remoteCdnImageUrl))
+                {
+                    remoteCdnImageUrl = "https://diapstash.com/diapstash/assets/icons/Diaper.svg";
                 }
 
                 var resolvedMetadata = (fullProductName, remoteCdnImageUrl);

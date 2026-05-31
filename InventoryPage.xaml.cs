@@ -112,7 +112,7 @@ namespace DiapStash_Plugin
                         Name = primaryItem.Name,
                         Left = group.Sum(i => i.Left),
                         ImageUrl = string.IsNullOrWhiteSpace(primaryItem.ImageUrl) || !primaryItem.ImageUrl.StartsWith("http")
-                            ? "ms-appx:///Assets/StoreLogo.scale-400.png"
+                            ? "https://diapstash.com/diapstash/assets/icons/Diaper.svg"
                             : primaryItem.ImageUrl
                     };
                 });

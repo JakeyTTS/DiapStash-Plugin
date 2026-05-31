@@ -150,11 +150,26 @@ namespace DiapStash_Plugin
 
             if (!string.IsNullOrEmpty(statePayload.ImageUrl) && statePayload.ImageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             {
-                CardProductImage.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(statePayload.ImageUrl));
+                bool isSvg = false;
+                try
+                {
+                    var uri = new Uri(statePayload.ImageUrl);
+                    isSvg = uri.AbsolutePath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase);
+                }
+                catch { }
+
+                if (isSvg)
+                {
+                    CardProductImage.Source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(new Uri(statePayload.ImageUrl));
+                }
+                else
+                {
+                    CardProductImage.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(statePayload.ImageUrl));
+                }
             }
             else
             {
-                CardProductImage.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/StoreLogo.png"));
+                CardProductImage.Source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(new Uri("https://diapstash.com/diapstash/assets/icons/Diaper.svg"));
             }
 
             BadgeLeak.Visibility = statePayload.HasLeak ? Visibility.Visible : Visibility.Collapsed;
