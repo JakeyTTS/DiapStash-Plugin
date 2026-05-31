@@ -115,19 +115,21 @@
                             <TextBlock Text="Default DiapStash Response Blueprint" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"/>
                             <TextBlock Text=" {diapstash_change}" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15" Foreground="MediumOrchid" FontWeight="Bold"/>
                         </StackPanel>
-                        <TextBlock Text="Design the primary core message framework read out loud by JakeyTTS. To include your conditional rules configured down below, remember to drop their exact dynamic token handle tag (e.g. {diapstash_rule_myruleblockname}) into this framework container." FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
+                        <TextBlock Text="Design the primary core message framework read out loud by JakeyTTS. You can type JakeyTTS conditional blocks natively here (e.g. [if:diapstash_leak==YES] Oh no! [/if])." FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
                         <TextBox x:Name="CustomTtsTemplateBox" Header="Core DiapStash Notification Template" Height="70" TextWrapping="Wrap" AcceptsReturn="True"/>
                         <Button x:Name="SaveTemplateBtn" Content="Save Core Response Framework" Click="SaveTtsTemplate_Click" Style="{StaticResource AccentButtonStyle}" Width="240"/>
                     </StackPanel>
 
                     <MenuFlyoutSeparator Margin="0,10"/>
 
-                    <StackPanel Spacing="15">
+                    <ToggleSwitch x:Name="UseRuleBlocksToggle" Header="Enable Rule Blocks (Advanced)" IsOn="False" Toggled="UseRuleBlocksToggle_Toggled"/>
+
+                    <StackPanel x:Name="RuleMatrixContainer" Spacing="15" Visibility="Collapsed">
                         <Grid>
                             <StackPanel Spacing="2">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE71C;" FontSize="15" />
-                                    <TextBlock Text="Conditional Rule Injector Matrix" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"/>
+                                    <TextBlock Text="Advanced Action Blocks" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"/>
                                 </StackPanel>
                                 <TextBlock Text="Create complex conditional trees (IF / AND / ELSE IF) inside isolated card blocks. Click on the block headers to edit their identifier tag string." FontSize="12" Opacity="0.6"/>
                             </StackPanel>
@@ -142,7 +144,7 @@
                         <ItemsControl x:Name="RulesListView">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Margin="0,0,0,16" Background="{ThemeResource LayerFillColorAltBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                                    <Border Margin="0,0,0,12" Background="{ThemeResource LayerFillColorAltBrush}" BorderBrush="{ThemeResource AccentFillColorDefaultBrush}" BorderThickness="4,1,1,1" CornerRadius="4" Padding="16">
                                         <StackPanel Spacing="12">
 
                                             <Grid>
@@ -322,6 +324,10 @@
                         <StackPanel>
                             <TextBlock Text="{}{diapstash_leak}" FontWeight="SemiBold" FontSize="12" Foreground="MediumOrchid"/>
                             <TextBlock Text="Returns YES or NO status alerts." FontSize="11" Opacity="0.7"/>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="Native Conditionals" FontWeight="SemiBold" FontSize="12" Foreground="#9CDCFE"/>
+                            <TextBlock Text="JakeyTTS supports raw conditions out of the box in your template (e.g. [if:diapstash_leak==YES] Oh no! [/if])." FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="{}{diapstash_status}" FontWeight="SemiBold" FontSize="12" Foreground="MediumOrchid"/>

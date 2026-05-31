@@ -17,7 +17,7 @@ namespace DiapStash_Plugin
 
             // FIXED: Replaced Windows.Storage.ApplicationData container lookups with a raw filesystem fallback.
             // This stops WinRT runtime crashes inside unpackaged desktop environments.
-            string defaultTemplate = "[Diap Stash Default Notification] Status: {diapstash_status}. Item: {diapstash_product} (Size {diapstash_size}). Wetness: {diapstash_wetness}, Mess: {diapstash_messy}. Active Runtime: {diapstash_elapsed}.";
+            string defaultTemplate = "Current diaper status is {diapstash_status}. Product in use: {diapstash_product}, size {diapstash_size}. [if:diapstash_leak==YES]Warning: Leak detected. [/if]Wetness level: {diapstash_wetness}, mess level: {diapstash_messy}. Elapsed runtime: {diapstash_elapsed}.";
             string currentTemplate = defaultTemplate;
 
             try
@@ -50,6 +50,14 @@ namespace DiapStash_Plugin
             // Pull custom multi-level rule matrix parameters cleanly matching file fallbacks
             JakeyTtsClient.Instance.LoadRulesFromSettings();
             RulesListView.ItemsSource = JakeyTtsClient.Instance.ComplexRuleCards;
+        }
+
+        private void UseRuleBlocksToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (RuleMatrixContainer != null)
+            {
+                RuleMatrixContainer.Visibility = UseRuleBlocksToggle.IsOn ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         public async Task RefreshChangeAsync(bool forceRefresh = false)

@@ -407,7 +407,7 @@ namespace DiapStash_Plugin
                     dynamicCardTokens.Add(cleanCardKey, finalCardPhrase.Trim());
                 }
 
-                string defaultTemplate = "Current diaper status is {diapstash_status}. Product in use: {diapstash_product}, size {diapstash_size}. Wetness level: {diapstash_wetness}, mess level: {diapstash_messy}. Elapsed runtime: {diapstash_elapsed}.";
+                string defaultTemplate = "Current diaper status is {diapstash_status}. Product in use: {diapstash_product}, size {diapstash_size}. [if:diapstash_leak==YES]Warning: Leak detected. [/if]Wetness level: {diapstash_wetness}, mess level: {diapstash_messy}. Elapsed runtime: {diapstash_elapsed}.";
                 string userCustomTemplate = defaultTemplate;
 
                 try
