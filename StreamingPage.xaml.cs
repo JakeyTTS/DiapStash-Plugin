@@ -859,6 +859,35 @@ namespace DiapStash_Plugin
             if (ElementCornerRadiusBox != null) ElementCornerRadiusBox.Text = e.NewValue.ToString("0");
         }
 
+        private void ImageStretchCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Just dummy logic if we need to expand.
+            ElementProp_Changed(sender, null);
+        }
+
+        private async void ImageCustomUrlBrowseBtn_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker();
+            var window = MainWindow.Instance;
+            if (window == null) return;
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+            picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.Thumbnail;
+            picker.FileTypeFilter.Add(".png");
+            picker.FileTypeFilter.Add(".jpg");
+            picker.FileTypeFilter.Add(".jpeg");
+            picker.FileTypeFilter.Add(".gif");
+            picker.FileTypeFilter.Add(".webp");
+
+            var file = await picker.PickSingleFileAsync();
+            if (file != null)
+            {
+                string encodedPath = Uri.EscapeDataString(file.Path);
+                ImageCustomUrlBox.Text = $"http://localhost:8890/overlay/local?path={encodedPath}";
+            }
+        }
+
         private void ElementProp_Changed(object sender, RoutedEventArgs e)
         {
             if (!_isInitialized || _selectedModel == null || _isRefreshingProperties) return;

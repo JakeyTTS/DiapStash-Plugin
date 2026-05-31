@@ -57,6 +57,23 @@ namespace DiapStash_Plugin
                     {
                         ForcePreviewTrigger = true; resp.StatusCode = 200; resp.ContentLength64 = 0;
                     }
+                    else if (ctx.Request.Url!.AbsolutePath == "/overlay/local")
+                    {
+                        try
+                        {
+                            string path = ctx.Request.QueryString["path"] ?? "";
+                            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                            {
+                                byte[] img = System.IO.File.ReadAllBytes(path);
+                                string ext = System.IO.Path.GetExtension(path).ToLower();
+                                resp.ContentType = ext == ".png" ? "image/png" : (ext == ".gif" ? "image/gif" : (ext == ".webp" ? "image/webp" : "image/jpeg"));
+                                resp.ContentLength64 = img.Length;
+                                await resp.OutputStream.WriteAsync(img, 0, img.Length);
+                            }
+                            else { resp.StatusCode = 404; }
+                        }
+                        catch { resp.StatusCode = 500; }
+                    }
                     else if (ctx.Request.Url!.AbsolutePath == "/overlay/config")
                     {
                         try
@@ -200,6 +217,12 @@ namespace DiapStash_Plugin
                                     dom.style.fontWeight = el.fontWeight || el.FontWeight;
                                     dom.style.fontStyle = el.fontStyle || el.FontStyle || 'normal';
                                     dom.style.color = formatCssColor(el.colorHex || el.ColorHex);
+                                    
+                                    const align = el.textAlignment || el.TextAlignment || 'Left';
+                                    dom.style.display = 'flex';
+                                    dom.style.alignItems = 'center';
+                                    dom.style.justifyContent = align === 'Center' ? 'center' : (align === 'Right' ? 'flex-end' : 'flex-start');
+                                    dom.style.textAlign = align.toLowerCase();
                                     
                                     const wrap = el.textWrap !== undefined ? el.textWrap : el.TextWrap;
                                     dom.style.whiteSpace = wrap ? 'normal' : 'nowrap';

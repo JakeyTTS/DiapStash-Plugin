@@ -420,7 +420,14 @@
                             <ComboBoxItem Content="DiapStashImage"/>
                             <ComboBoxItem Content="Custom"/>
                         </ComboBox>
-                        <TextBox x:Name="ImageCustomUrlBox" Header="Custom URL" TextChanged="ElementProp_Changed"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" x:Name="ImageCustomUrlBox" Header="Custom URL" TextChanged="ElementProp_Changed" Margin="0,0,10,0"/>
+                            <Button Grid.Column="1" Content="Browse..." Click="ImageCustomUrlBrowseBtn_Click" VerticalAlignment="Bottom" Height="32"/>
+                        </Grid>
                         <ComboBox x:Name="ImageStretchCombo" Header="Stretch" SelectionChanged="ElementProp_Changed" HorizontalAlignment="Stretch">
                             <ComboBoxItem Content="Uniform"/>
                             <ComboBoxItem Content="UniformToFill"/>
