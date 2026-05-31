@@ -67,7 +67,7 @@ namespace DiapStash_Plugin
                     string rawCreds = File.ReadAllText(credentialsPath);
                     using var doc = JsonDocument.Parse(rawCreds);
                     var root = doc.RootElement;
-                    currentClientId = root.TryGetProperty("ClientId", out var idProp) ? idProp.GetString() ?? "" : "";
+                    currentClientId = DiapStashCredentials.ClientId;
                     currentToken = root.TryGetProperty("AccessToken", out var tokenProp) ? tokenProp.GetString() ?? "" : "";
                     _cachedTtsUrl = root.TryGetProperty("TtsUrl", out var urlProp) ? urlProp.GetString() ?? _cachedTtsUrl : _cachedTtsUrl;
                 }

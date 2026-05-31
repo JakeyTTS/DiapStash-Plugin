@@ -21,8 +21,7 @@
 
             <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
                 <ProgressRing x:Name="StatusLoadingRing" IsActive="True" Width="24" Height="24" VerticalAlignment="Center"/>
-                <Button x:Name="ConfigureApiBtn" x:Uid="BtnOpenSettings" Click="ConfigureApi_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}" Padding="24,8,24,8"/>
-                <Button x:Name="LoginPortalBtn" x:Uid="BtnExecuteLogin" Click="LoginPortal_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}" Padding="24,8,24,8"/>
+                <Button x:Name="LoginPortalBtn" x:Uid="BtnExecuteLogin" Content="Login with DiapStash" Click="LoginPortal_Click" Visibility="Collapsed" Background="#47289B" Foreground="White" Padding="24,8,24,8"/>
             </StackPanel>
         </StackPanel>
 

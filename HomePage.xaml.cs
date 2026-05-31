@@ -25,10 +25,7 @@ namespace DiapStash_Plugin
         {
             // FIXED: Stripped all ApplicationData container settings.
             // Pulled configuration tokens strictly out of our local disk credentials file map structure.
-            string clientId = "";
-            string clientSecret = "";
             string token = "";
-            _cachedTtsUrl = "ws://localhost:8889/";
 
             try
             {
@@ -38,41 +35,24 @@ namespace DiapStash_Plugin
                     string rawCreds = File.ReadAllText(credentialsPath);
                     using var doc = JsonDocument.Parse(rawCreds);
                     var root = doc.RootElement;
-                    clientId = root.TryGetProperty("ClientId", out var idProp) ? idProp.GetString() ?? "" : "";
-                    clientSecret = root.TryGetProperty("ClientSecret", out var secProp) ? secProp.GetString() ?? "" : "";
                     token = root.TryGetProperty("AccessToken", out var tokenProp) ? tokenProp.GetString() ?? "" : "";
                     _cachedTtsUrl = root.TryGetProperty("TtsUrl", out var urlProp) ? urlProp.GetString() ?? _cachedTtsUrl : _cachedTtsUrl;
                 }
             }
             catch { }
 
-            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
-            {
-                UpdateStatusUi("API credentials missing. Please configure Client ID and Secret in Settings.", showConfigure: true, showLogin: false, dotColor: Microsoft.UI.Colors.Red);
-                AppendLog("⚠️ Platform status: Unconfigured. Awaiting Client ID credentials.");
-                
-                var settingsInstance = MainWindow.Instance?.GetSettingsPageInstance();
-                if (settingsInstance != null)
-                {
-                    MainWindow.Instance?.NavigateToPage("Settings");
-                    _ = settingsInstance.LaunchSetupWizardAsync();
-                }
-                
-                return;
-            }
-
             if (string.IsNullOrWhiteSpace(token))
             {
-                UpdateStatusUi("Authentication token missing. Portal authorization required.", showConfigure: false, showLogin: true, dotColor: Microsoft.UI.Colors.Yellow);
+                UpdateStatusUi("Authentication token missing. Portal authorization required.", showLogin: true, dotColor: Microsoft.UI.Colors.Yellow);
                 AppendLog("⚠️ Platform status: Missing security token context.");
                 return;
             }
 
-            DiapStashClient.Instance.ConfigureAuthentication(token, clientId);
+            DiapStashClient.Instance.ConfigureAuthentication(token, DiapStashCredentials.ClientId);
 
             if (JakeyTtsClient.Instance.IsConnected)
             {
-                UpdateStatusUi("DiapStash Ready. Connected to Platform.", showConfigure: false, showLogin: false, dotColor: Microsoft.UI.Colors.Green, hideLoading: true);
+                UpdateStatusUi("DiapStash Ready. Connected to Platform.", showLogin: false, dotColor: Microsoft.UI.Colors.Green, hideLoading: true);
                 AppendLog("✨ Connected to engine passively via background thread orchestration channels.");
                 return;
             }
@@ -82,7 +62,7 @@ namespace DiapStash_Plugin
 
             if (DiapStashClient.Instance.IsRateLimited)
             {
-                UpdateStatusUi("⚠️ Too many requests! API limit reached. Screen cannot be loaded right now.", showConfigure: false, showLogin: false, dotColor: Microsoft.UI.Colors.Red, hideLoading: true);
+                UpdateStatusUi("⚠️ Too many requests! API limit reached. Screen cannot be loaded right now.", showLogin: false, dotColor: Microsoft.UI.Colors.Red, hideLoading: true);
                 AppendLog("❌ Platform status: 429 Rate limited. Postponing thread sequence requests.");
                 return;
             }
@@ -105,12 +85,12 @@ namespace DiapStash_Plugin
 
             if (payloadCheck == null)
             {
-                UpdateStatusUi("Session expired (401 Unauthorized). Please Login.", showConfigure: false, showLogin: true, dotColor: Microsoft.UI.Colors.Red);
+                UpdateStatusUi("Session expired (401 Unauthorized). Please Login.", showLogin: true, dotColor: Microsoft.UI.Colors.Red);
                 AppendLog("❌ Platform status: Unauthorized API connection context. Awaiting manual login.");
                 return;
             }
 
-            UpdateStatusUi("DiapStash Ready. Connected to Platform.", showConfigure: false, showLogin: false, dotColor: Microsoft.UI.Colors.Green, hideLoading: true);
+            UpdateStatusUi("DiapStash Ready. Connected to Platform.", showLogin: false, dotColor: Microsoft.UI.Colors.Green, hideLoading: true);
             AppendLog("✨ Integration bridge authorized. Synchronizing real-time telemetry datasets...");
 
             await ExecuteTtsConnectionAsync();
@@ -131,7 +111,7 @@ namespace DiapStash_Plugin
             }
         }
 
-        private void UpdateStatusUi(string message, bool showConfigure, bool showLogin, Windows.UI.Color dotColor, bool hideLoading = false)
+        private void UpdateStatusUi(string message, bool showLogin, Windows.UI.Color dotColor, bool hideLoading = false)
         {
             if (this.DispatcherQueue == null) return;
 
@@ -139,7 +119,6 @@ namespace DiapStash_Plugin
             {
                 StatusMessageLabel.Text = message;
                 StatusDot.Fill = new Microsoft.UI.Xaml.Media.SolidColorBrush(dotColor);
-                ConfigureApiBtn.Visibility = showConfigure ? Visibility.Visible : Visibility.Collapsed;
                 LoginPortalBtn.Visibility = showLogin ? Visibility.Visible : Visibility.Collapsed;
 
                 if (hideLoading) StatusLoadingRing.IsActive = false;
@@ -170,7 +149,7 @@ namespace DiapStash_Plugin
             System.Diagnostics.Debug.WriteLine(logLine);
         }
 
-        private void ConfigureApi_Click(object sender, RoutedEventArgs e) => MainWindow.Instance?.NavigateToPage("Settings");
+
 
         private void LoginPortal_Click(object sender, RoutedEventArgs e)
         {

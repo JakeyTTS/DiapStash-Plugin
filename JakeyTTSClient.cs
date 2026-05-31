@@ -78,54 +78,111 @@ namespace DiapStash_Plugin
             catch { }
         }
 
-        [System.Diagnostics.DebuggerNonUserCode]
-        public async Task StartAsync(string bridgeUrl)
+        private Task<bool> IsPortOpenAsync(Uri uri)
         {
+            var tcs = new TaskCompletionSource<bool>();
+            try
+            {
+                var host = uri.Host;
+                if (host.ToLower() == "localhost") host = "127.0.0.1";
+                
+                if (!System.Net.IPAddress.TryParse(host, out var ip))
+                {
+                    var entry = System.Net.Dns.GetHostEntry(host);
+                    ip = entry.AddressList.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork) ?? entry.AddressList.FirstOrDefault();
+                }
+
+                if (ip == null) 
+                {
+                    tcs.TrySetResult(false);
+                    return tcs.Task;
+                }
+
+                var socket = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                var args = new SocketAsyncEventArgs { RemoteEndPoint = new System.Net.IPEndPoint(ip, uri.Port) };
+
+                args.Completed += (s, e) =>
+                {
+                    bool success = e.SocketError == SocketError.Success;
+                    socket.Dispose();
+                    args.Dispose();
+                    tcs.TrySetResult(success);
+                };
+
+                if (!socket.ConnectAsync(args))
+                {
+                    bool success = args.SocketError == SocketError.Success;
+                    socket.Dispose();
+                    args.Dispose();
+                    tcs.TrySetResult(success);
+                }
+            }
+            catch
+            {
+                tcs.TrySetResult(false);
+            }
+            return tcs.Task;
+        }
+
+        [System.Diagnostics.DebuggerNonUserCode]
+        public async Task StartAsync(string bridgeUrl, bool isAutoReconnect = false)
+        {
+            if (IsConnected) return;
+            if (_isReconnecting && !isAutoReconnect) return;
+
             await _connectionLock.WaitAsync();
             try
             {
                 if (IsConnected) return;
 
+                var targetUri = new Uri(bridgeUrl);
+
+                // FIXED: Pre-flight check to prevent Visual Studio from breaking on HttpRequestException internally.
+                if (!await IsPortOpenAsync(targetUri))
+                {
+                    if (!isAutoReconnect) LogReceived?.Invoke("⚠️ Local engine is offline. Enabling background auto-reconnect.");
+                    CleanupSocket();
+                    HandleAutomaticRecovery(bridgeUrl);
+                    return;
+                }
+
                 _cts?.Cancel();
                 _cts = new CancellationTokenSource();
                 _webSocket = new ClientWebSocket();
 
-                LogReceived?.Invoke($"🔌 Attempting connection to JakeyTTS Core Engine at {bridgeUrl}...");
+                if (!isAutoReconnect)
+                {
+                    LogReceived?.Invoke($"🔌 Attempting connection to JakeyTTS Core Engine at {bridgeUrl}...");
+                }
 
                 using (var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
                 using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, timeoutCts.Token))
                 {
-                    await _webSocket.ConnectAsync(new Uri(bridgeUrl), linkedCts.Token);
+                    await _webSocket.ConnectAsync(targetUri, linkedCts.Token);
                 }
 
                 LogReceived?.Invoke("✅ Network pipe connected! Authorizing version handshake parameters...");
+                _isReconnecting = false;
                 await SendHandshakeAsync();
 
                 _ = Task.Run(async () => await SynchronizeJakeyGlobalVariablesAsync(forceRefresh: true));
                 _ = Task.Run(ReceiveLoopAsync);
             }
-            // FIXED: Interceptamos de forma quirúrgica la denegación de sockets para evitar que rompa el árbol visual
-            catch (WebSocketException wsex) when (wsex.InnerException is SocketException sex && sex.SocketErrorCode == SocketError.ConnectionRefused)
+            catch (Exception ex) when (ex is WebSocketException || ex is HttpRequestException || ex is SocketException || ex.InnerException is SocketException || ex.InnerException is HttpRequestException)
             {
-                LogReceived?.Invoke("⚠️ Standalone mode active: Local engine at port 8889 is offline. Auto-reconnect active.");
-                CleanupSocket();
-                HandleAutomaticRecovery(bridgeUrl);
-            }
-            catch (HttpRequestException)
-            {
-                LogReceived?.Invoke("⚠️ Standalone mode active: Local engine at port 8889 is offline. Auto-reconnect active.");
+                if (!isAutoReconnect) LogReceived?.Invoke("⚠️ Local engine at port 8889 is offline. Enabling background auto-reconnect.");
                 CleanupSocket();
                 HandleAutomaticRecovery(bridgeUrl);
             }
             catch (OperationCanceledException)
             {
-                LogReceived?.Invoke("⚠️ Connection attempt timed out. JakeyTTS server might not be running.");
+                if (!isAutoReconnect) LogReceived?.Invoke("⚠️ Connection attempt timed out. JakeyTTS server might not be running.");
                 CleanupSocket();
                 HandleAutomaticRecovery(bridgeUrl);
             }
             catch (Exception ex)
             {
-                LogReceived?.Invoke($"❌ Connection anomaly: {ex.Message}. Operating in offline standalone fallback mode.");
+                if (!isAutoReconnect) LogReceived?.Invoke($"❌ Connection anomaly: {ex.Message}. Enabling background auto-reconnect.");
                 CleanupSocket();
                 HandleAutomaticRecovery(bridgeUrl);
             }
@@ -179,7 +236,7 @@ namespace DiapStash_Plugin
                 {
                     await Task.Delay(TimeSpan.FromSeconds(10));
                     if (!_isReconnecting) break;
-                    await StartAsync(bridgeUrl);
+                    await StartAsync(bridgeUrl, isAutoReconnect: true);
                 }
                 _isReconnecting = false;
             });

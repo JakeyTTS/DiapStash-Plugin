@@ -35,19 +35,12 @@ namespace DiapStash_Plugin
                     string rawJson = File.ReadAllText(credentialsPath);
                     using var doc = JsonDocument.Parse(rawJson);
                     var root = doc.RootElement;
-                    clientId = root.TryGetProperty("ClientId", out var idProp) ? idProp.GetString() ?? "" : "";
                     token = root.TryGetProperty("AccessToken", out var tokenProp) ? tokenProp.GetString() ?? "" : "";
                     ttsUrl = root.TryGetProperty("TtsUrl", out var urlProp) ? urlProp.GetString() ?? ttsUrl : ttsUrl;
-
-                    if (root.TryGetProperty("ClientSecret", out var secretProp))
-                    {
-                        ClientSecretBox.Password = secretProp.GetString() ?? "";
-                    }
                 }
             }
             catch { }
 
-            ClientIdBox.Text = clientId;
             StashTokenBox.Text = token;
             TtsServerBox.Text = ttsUrl;
 
@@ -59,69 +52,6 @@ namespace DiapStash_Plugin
                 else if (fe.RequestedTheme == ElementTheme.Dark) ThemeComboBox.SelectedIndex = 2;
             }
 
-            SetupWizardDialog.XamlRoot = this.XamlRoot;
-        }
-
-        private int _currentWizardStep = 1;
-
-        public async void LaunchSetupWizard_Click(object sender, RoutedEventArgs e)
-        {
-            await LaunchSetupWizardAsync();
-        }
-
-        public async Task LaunchSetupWizardAsync()
-        {
-            _currentWizardStep = 1;
-            UpdateWizardUi();
-            WizardClientIdBox.Text = ClientIdBox.Text;
-            WizardClientSecretBox.Password = ClientSecretBox.Password;
-            if (this.XamlRoot != null) {
-                SetupWizardDialog.XamlRoot = this.XamlRoot;
-            }
-            await SetupWizardDialog.ShowAsync();
-        }
-
-        private void SetupWizardDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-        {
-            if (_currentWizardStep < 4)
-            {
-                args.Cancel = true; // prevent closing
-                _currentWizardStep++;
-                UpdateWizardUi();
-            }
-            else
-            {
-                // Finish button clicked
-                ClientIdBox.Text = WizardClientIdBox.Text;
-                ClientSecretBox.Password = WizardClientSecretBox.Password;
-                OpenPortal_Click(this, new RoutedEventArgs());
-            }
-        }
-
-        private void SetupWizardDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-        {
-            if (_currentWizardStep > 1)
-            {
-                args.Cancel = true; // prevent closing
-                _currentWizardStep--;
-                UpdateWizardUi();
-            }
-        }
-
-        private void UpdateWizardUi()
-        {
-            WizardStep1.Visibility = Visibility.Collapsed;
-            WizardStep2.Visibility = Visibility.Collapsed;
-            WizardStep3.Visibility = Visibility.Collapsed;
-            WizardStep4.Visibility = Visibility.Collapsed;
-
-            if (_currentWizardStep == 1) WizardStep1.Visibility = Visibility.Visible;
-            else if (_currentWizardStep == 2) WizardStep2.Visibility = Visibility.Visible;
-            else if (_currentWizardStep == 3) WizardStep3.Visibility = Visibility.Visible;
-            else if (_currentWizardStep == 4) WizardStep4.Visibility = Visibility.Visible;
-
-            SetupWizardDialog.SecondaryButtonText = _currentWizardStep == 1 ? "" : "Back";
-            SetupWizardDialog.PrimaryButtonText = _currentWizardStep == 4 ? "Finish" : "Next";
         }
 
         private void ThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -181,8 +111,6 @@ namespace DiapStash_Plugin
 
                 var updatedBackup = new
                 {
-                    ClientId = clientId,
-                    ClientSecret = clientSecret,
                     AccessToken = token,
                     RefreshToken = refreshToken,
                     TtsUrl = ttsUrl,
@@ -212,12 +140,12 @@ namespace DiapStash_Plugin
 
         private async void OpenPortal_Click(object sender, RoutedEventArgs e)
         {
-            string clientId = ClientIdBox.Text.Trim();
-            string clientSecret = ClientSecretBox.Password.Trim();
+            string clientId = DiapStashCredentials.ClientId;
+            string clientSecret = DiapStashCredentials.ClientSecret;
 
             if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
             {
-                MainWindow.Instance?.Log("⚠️ Settings validation mismatch. Specify Client ID and Secret properties.");
+                MainWindow.Instance?.Log("⚠️ Settings validation mismatch. Client ID or Secret is not configured.");
                 return;
             }
 
@@ -407,8 +335,6 @@ namespace DiapStash_Plugin
 
                         var credentialBackup = new
                         {
-                            ClientId = clientId,
-                            ClientSecret = clientSecret,
                             AccessToken = accessToken,
                             RefreshToken = refreshToken,
                             TtsUrl = existingTtsUrl,
@@ -423,6 +349,8 @@ namespace DiapStash_Plugin
                         this.DispatcherQueue.TryEnqueue(() =>
                         {
                             StashTokenBox.Text = accessToken;
+                            MainWindow.Instance?.NavigateToPage("Home");
+                            MainWindow.Instance?.Activate();
                         });
                     }
 
@@ -437,8 +365,8 @@ namespace DiapStash_Plugin
 
         public async Task<bool> RefreshAccessTokenAsync()
         {
-            string clientId = "";
-            string clientSecret = "";
+            string clientId = DiapStashCredentials.ClientId;
+            string clientSecret = DiapStashCredentials.ClientSecret;
             string refreshToken = "";
             string ttsUrl = "ws://localhost:8889/";
             string template = "";
@@ -451,8 +379,6 @@ namespace DiapStash_Plugin
                     string rawJson = File.ReadAllText(credentialsPath);
                     using var doc = JsonDocument.Parse(rawJson);
                     var root = doc.RootElement;
-                    clientId = root.TryGetProperty("ClientId", out var idProp) ? idProp.GetString() ?? "" : "";
-                    clientSecret = root.TryGetProperty("ClientSecret", out var secProp) ? secProp.GetString() ?? "" : "";
                     refreshToken = root.TryGetProperty("RefreshToken", out var refProp) ? refProp.GetString() ?? "" : "";
                     ttsUrl = root.TryGetProperty("TtsUrl", out var urlProp) ? urlProp.GetString() ?? ttsUrl : ttsUrl;
                     template = root.TryGetProperty("CustomTtsTemplate", out var tmpProp) ? tmpProp.GetString() ?? template : template;
@@ -502,8 +428,6 @@ namespace DiapStash_Plugin
                         string credentialsPath = Path.Combine(AppContext.BaseDirectory, "credentials.json");
                         var updatedBackup = new
                         {
-                            ClientId = clientId,
-                            ClientSecret = clientSecret,
                             AccessToken = newAccessToken,
                             RefreshToken = refreshToken,
                             TtsUrl = ttsUrl,
