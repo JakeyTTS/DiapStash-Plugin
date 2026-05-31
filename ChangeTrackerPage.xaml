@@ -107,24 +107,33 @@
                             </StackPanel>
                         </Grid>
                     </Border>
-
+                    
                     <InfoBar x:Name="NoActiveSessionInfoBar" Severity="Informational" Title="Timeline Idle" Message="Awaiting active sequence signals." IsOpen="True" IsClosable="False"/>
 
-                    <StackPanel Spacing="10" Margin="0,5,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="Default DiapStash Response Blueprint" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"/>
-                            <TextBlock Text=" {diapstash_change}" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15" Foreground="MediumOrchid" FontWeight="Bold"/>
+                    <Border Margin="0,15,0,0" Background="{ThemeResource LayerFillColorAltBrush}" BorderBrush="{ThemeResource AccentFillColorDefaultBrush}" BorderThickness="4,1,1,1" CornerRadius="4" Padding="16">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE9E9;" FontSize="14" VerticalAlignment="Center" Foreground="{ThemeResource SystemAccentColor}" Margin="0,0,2,0"/>
+                                <TextBlock Text="Core Base Response" FontWeight="Black" Foreground="{ThemeResource SystemAccentColor}" VerticalAlignment="Center" FontSize="14"/>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Opacity="0.6" Margin="10,0,0,0">
+                                    <TextBlock Text="➔ Token representation: " FontSize="13" FontStyle="Italic"/>
+                                    <TextBlock Text="{}{diapstash_change}" FontSize="13" FontWeight="Bold" Foreground="MediumOrchid"/>
+                                </StackPanel>
+                            </StackPanel>
+                            
+                            <MenuFlyoutSeparator/>
+
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Design the primary core message framework read out loud by JakeyTTS. You can type JakeyTTS conditional blocks natively here (e.g. [if:diapstash_leak==YES] Oh no! [/if])." FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
+                                <TextBox x:Name="CustomTtsTemplateBox" Header="Core DiapStash Notification Template" MinHeight="100" TextWrapping="Wrap" AcceptsReturn="True"/>
+                                <Button x:Name="SaveTemplateBtn" Content="Save Core Response Framework" Click="SaveTtsTemplate_Click" Style="{StaticResource AccentButtonStyle}" Width="240"/>
+                            </StackPanel>
                         </StackPanel>
-                        <TextBlock Text="Design the primary core message framework read out loud by JakeyTTS. You can type JakeyTTS conditional blocks natively here (e.g. [if:diapstash_leak==YES] Oh no! [/if])." FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
-                        <TextBox x:Name="CustomTtsTemplateBox" Header="Core DiapStash Notification Template" Height="70" TextWrapping="Wrap" AcceptsReturn="True"/>
-                        <Button x:Name="SaveTemplateBtn" Content="Save Core Response Framework" Click="SaveTtsTemplate_Click" Style="{StaticResource AccentButtonStyle}" Width="240"/>
-                    </StackPanel>
+                    </Border>
 
-                    <MenuFlyoutSeparator Margin="0,10"/>
+                    <MenuFlyoutSeparator Margin="0,20,0,10"/>
 
-                    <ToggleSwitch x:Name="UseRuleBlocksToggle" Header="Enable Rule Blocks (Advanced)" IsOn="False" Toggled="UseRuleBlocksToggle_Toggled"/>
-
-                    <StackPanel x:Name="RuleMatrixContainer" Spacing="15" Visibility="Collapsed">
+                    <StackPanel x:Name="RuleMatrixContainer" Spacing="15">
                         <Grid>
                             <StackPanel Spacing="2">
                                 <StackPanel Orientation="Horizontal" Spacing="6">

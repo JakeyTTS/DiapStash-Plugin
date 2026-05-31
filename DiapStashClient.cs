@@ -161,7 +161,7 @@ namespace DiapStash_Plugin
                 allStockItems.AddRange(reusablesTask.Result);
 
                 _cachedStockItems = allStockItems;
-                _stockItemsCacheExpiration = DateTime.Now.AddMinutes(5);
+                _stockItemsCacheExpiration = DateTime.Now.AddMinutes(1);
             }
             catch { }
             return allStockItems;
@@ -500,7 +500,7 @@ namespace DiapStash_Plugin
                 }
 
                 _cachedChangeState = stateResult;
-                _changeStateCacheExpiration = DateTime.Now.AddMinutes(5);
+                _changeStateCacheExpiration = DateTime.Now.AddMinutes(1);
 
                 return stateResult;
             }

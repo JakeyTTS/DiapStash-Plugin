@@ -52,14 +52,6 @@ namespace DiapStash_Plugin
             RulesListView.ItemsSource = JakeyTtsClient.Instance.ComplexRuleCards;
         }
 
-        private void UseRuleBlocksToggle_Toggled(object sender, RoutedEventArgs e)
-        {
-            if (RuleMatrixContainer != null)
-            {
-                RuleMatrixContainer.Visibility = UseRuleBlocksToggle.IsOn ? Visibility.Visible : Visibility.Collapsed;
-            }
-        }
-
         public async Task RefreshChangeAsync(bool forceRefresh = false)
         {
             string currentToken = string.Empty;
